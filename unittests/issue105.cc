@@ -16,14 +16,18 @@
  */
 
 #include <iostream>
+#include <cstdlib>
 #include <ups/upscaledb.hpp>
 
-int main()
+int main(int argc, char* argv[])
 {
     ups_env_t* env;
     ups_env_create(&env, "test.db", UPS_ENABLE_TRANSACTIONS, 0664, 0);
     //ups_env_create(&env, "test.db", 0, 0664, 0);
-
+    if ( argc > 1 )
+    {
+        ups_set_committed_flush_threshold(std::atoi(argv[1]));
+    }
     ups_parameter_t params[] = {
     {UPS_PARAM_KEY_TYPE, UPS_TYPE_UINT32},
     {0, }
