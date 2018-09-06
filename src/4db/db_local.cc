@@ -124,7 +124,7 @@ is_modified_by_active_transaction(TxnIndex *txn_index)
       // if the transaction is still active, or if it is committed
       // but was not yet flushed then return an error
       if (!optxn->is_aborted() && !optxn->is_committed())
-        if (NOTSET(op->flags, TxnOperation::kIsFlushed))
+        if (NOTSET(op->flags, TxnOperation::kIsFlushed)) // XXX: always true
           return true;
     }
   }
@@ -149,7 +149,7 @@ is_key_erased(Context *context, TxnIndex *txn_index, ups_key_t *key)
       continue;
     if (optxn->is_committed() || context->txn == optxn) {
       if (ISSET(op->flags, TxnOperation::kIsFlushed))
-        continue;
+        continue; // XXX: why looking at operations preceding flushed ones?
       if (ISSET(op->flags, TxnOperation::kErase)) {
         // TODO does not check duplicates!!
         return true;
@@ -190,7 +190,7 @@ check_erase_conflicts(LocalDb *db, Context *context, TxnNode *node,
 
     if (optxn->is_committed() || context->txn == optxn) {
       if (ISSET(op->flags, TxnOperation::kIsFlushed))
-        continue;
+        continue; // XXX: why are flushed operations simply ignored???
       // if key was erased then it doesn't exist and can be
       // inserted without problems
       if (ISSET(op->flags, TxnOperation::kErase))
@@ -245,7 +245,7 @@ check_insert_conflicts(LocalDb *db, Context *context, TxnNode *node,
 
     if (optxn->is_committed() || context->txn == optxn) {
       if (ISSET(op->flags, TxnOperation::kIsFlushed))
-        continue;
+        continue; // XXX: why are flushed operations simply ignored???
       /* if key was erased then it doesn't exist and can be
        * inserted without problems */
       if (ISSET(op->flags, TxnOperation::kErase))
@@ -338,7 +338,7 @@ retry:
 
     if (optxn->is_committed() || context->txn == optxn) {
       if (unlikely(ISSET(op->flags, TxnOperation::kIsFlushed)))
-        continue;
+        continue; // XXX: why are flushed operations simply ignored???
 
       // if the key already exists then return its record; do not
       // return pointers to TxnOperation::get_record, because it may be
@@ -367,8 +367,8 @@ retry:
           exact_is_erased = true;
         if (ISSET(flags, UPS_FIND_LT_MATCH)) {
           node = node->previous_sibling();
-          if (!node)
-            break;
+          if (!node)   // XXX: what if UPS_FIND_GT_MATCH is also requested
+            break;     // XXX: and node->next_sibling() exists?
           ups_key_set_intflags(key,
               (ups_key_get_intflags(key) | BtreeKey::kApproximate));
           goto retry;
@@ -426,7 +426,7 @@ retry:
     // not deleted or overwritten in a transaction
     bool first_run = true;
     do {
-      uint32_t new_flags = flags; 
+      uint32_t new_flags = flags;
 
       // the "exact match" key was erased? then don't fetch it again
       if (!first_run || exact_is_erased) {
@@ -512,7 +512,7 @@ retry:
   return 0;
 }
 
-static inline void 
+static inline void
 update_other_cursors_after_erase(LocalDb *db, Context *context, TxnNode *node,
                 LocalCursor *current_cursor)
 {
@@ -533,7 +533,7 @@ update_other_cursors_after_erase(LocalDb *db, Context *context, TxnNode *node,
         hit = true;
     }
     // if cursor is coupled to the same key in the btree: increment
-    // duplicate index (if required) 
+    // duplicate index (if required)
     else if (!c->btree_cursor.is_nil()
             && c->btree_cursor.points_to(context, node->key()))
       hit = true;
@@ -817,7 +817,7 @@ struct MetricsVisitor : public BtreeVisitor {
     else
       node->fill_metrics(&metrics->btree_internal_metrics);
   }
-  
+
   ups_env_metrics_t *metrics;
 };
 
@@ -961,7 +961,7 @@ prepare_record_number(LocalDb *db, ups_key_t *key, ByteArray *arena,
   *(T *)key->data = record_number;
 }
 
-static inline void 
+static inline void
 update_other_cursors_after_insert(LocalDb *db, Context *context, TxnNode *node,
                 LocalCursor *current_cursor)
 {
@@ -982,7 +982,7 @@ update_other_cursors_after_insert(LocalDb *db, Context *context, TxnNode *node,
         hit = true;
     }
     // if cursor is coupled to the same key in the btree: increment
-    // duplicate index (if required) 
+    // duplicate index (if required)
     else if (c->btree_cursor.points_to(context, node->key()))
       hit = true;
 
@@ -1450,7 +1450,7 @@ LocalDb::select_range(SelectStatement *stmt, LocalCursor *begin,
   ups_key_t key = {0};
   ups_record_t record = {0};
   ScopedPtr<LocalCursor> tmpcursor;
- 
+
   LocalCursor *cursor = begin;
   if (unlikely(cursor && cursor->is_nil()))
     return UPS_CURSOR_IS_NIL;
@@ -1627,7 +1627,7 @@ LocalDb::flush_txn_operation(Context *context, LocalTxn *txn, TxnOperation *op)
   if (ISSETANY(op->flags, TxnOperation::kInsert
                                 | TxnOperation::kInsertOverwrite
                                 | TxnOperation::kInsertDuplicate)) {
-    uint32_t additional_flag = 
+    uint32_t additional_flag =
       ISSET(op->flags, TxnOperation::kInsertDuplicate)
           ? UPS_DUPLICATE
           : UPS_OVERWRITE;

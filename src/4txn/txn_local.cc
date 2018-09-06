@@ -277,7 +277,7 @@ flush_transaction_to_journal(LocalTxn *txn)
 
   if (unlikely(journal == 0))
     return;
- 
+
   if (NOTSET(txn->flags, UPS_TXN_TEMPORARY))
     journal->append_txn_begin(txn, txn->name.empty() ? 0 : txn->name.c_str(),
                     txn->lsn);
@@ -499,7 +499,7 @@ struct KeyCounter : TxnIndex::Visitor {
 
       if (optxn->is_committed() || txn == optxn) {
         if (ISSET(op->flags, TxnOperation::kIsFlushed))
-          continue;
+          continue; // XXX: what's the point of looking past flushed operations?
 
         // if key was erased then it doesn't exist
         if (ISSET(op->flags, TxnOperation::kErase)) {
@@ -513,7 +513,7 @@ struct KeyCounter : TxnIndex::Visitor {
         }
 
         // key exists - include it
-        if (ISSET(op->flags, TxnOperation::kInsert)
+        if (ISSET(op->flags, TxnOperation::kInsert) //XXX: already handled above
             || (ISSET(op->flags, TxnOperation::kInsertOverwrite))) {
           // check if the key already exists in the btree - if yes,
           // we do not count it (it will be counted later)
