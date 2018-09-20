@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+
+set -e
+tmpdir=$(mktemp -d -p /run/user/$UID upscaledb_testing.XXXXXX)
+
+success=0
+cleanup()
+{
+    if [ "$success" -eq 1 ]
+    then
+        echo "$(tput setaf 2)========== OK ============$(tput setaf 7)"
+    else
+        echo "$(tput setaf 1)########### ERROR #############$(tput setaf 7)"
+    fi
+    rm -rf "$tmpdir"
+}
+
+trap cleanup EXIT
+
+mydir="$(dirname "$0")"
+mydir="$(cd "$mydir"; pwd)"
+cd "$mydir"/unittests
+make plugin
+make
+cp -r test issue{32,43,101,105} plugin.so data Makefile.am "$tmpdir"
+cd "$tmpdir"
+(set -x
+./test
+./issue32 -i
+./issue32 -r
+./issue43
+./issue101
+./issue105
+)
+success=1
