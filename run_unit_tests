@@ -30,6 +30,9 @@ cd "$tmpdir"
 ./issue32 -r
 ./issue43
 ./issue101
-./issue105
+for i in {1..10} {45..55} {70..80}
+do
+    ./issue105 "$i"
+done
 )
 success=1
