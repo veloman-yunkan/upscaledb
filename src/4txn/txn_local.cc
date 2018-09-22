@@ -478,6 +478,30 @@ struct KeyCounter : TxnIndex::Visitor {
     kNop
   };
 
+  // While looking through the transaction history in reverse
+  // chronological order we encounter uncertainties with respect
+  // to how the current operation affects the key count. To resolve
+  // that uncertainty we must look back earlier in time. This
+  // enum helps to keep track of the uncertainty that we are
+  // currently facing.
+  // Note that these uncertainties would not exist if the
+  // TxnOperation enum members had the following meanings:
+  //
+  //   - kInsert: the operation creates a new key
+  //   - kInsertOverwrite: the operation overwrites an existing key
+  //   - kInsertDuplicate: the operation adds a duplicate of an existing key
+  //
+  enum UncertaintyType {
+    kNoUncertainty,
+
+    // Was this key-value pair inserted or overwritten?
+    kInsertVsOverwrite,
+
+    // Was the key newly created or an existing key was duplicated?
+    // (this is an uncertainty when counting distinct keys)
+    kCreateVsDuplicate
+  };
+
   OperationType operation_type(uint32_t opflags) {
     if (ISSET(opflags, TxnOperation::kErase))
       return kRemoval;
@@ -511,12 +535,7 @@ struct KeyCounter : TxnIndex::Visitor {
     // !!
     // if keys are overwritten or a duplicate key is inserted, then
     // we have to consolidate the btree keys with the txn-tree keys.
-    //
-    // When we see an insert-overwrite operation whether the counter
-    // must be incremented or not depends on whether the key existed
-    // at that time or not. This is an uncertainty that can be resolved
-    // only looking back earlier in the transaction history.
-    bool thereIsAnInsertOverwriteUncertainty = false;
+    UncertaintyType uncertainty = kNoUncertainty;
 
     for (TxnOperation *op = node->newest_op;
                     op != 0;
@@ -533,32 +552,56 @@ struct KeyCounter : TxnIndex::Visitor {
 
         if ( optype == kRemoval )
         { // if key was erased then it doesn't exist
-          if ( thereIsAnInsertOverwriteUncertainty )
-            thereIsAnInsertOverwriteUncertainty = false;
-          else
-            counter--;
+          switch( uncertainty ) {
+            case kInsertVsOverwrite:  counter++; // it was actually an insert
+                                      break;
+
+            case kCreateVsDuplicate:  counter++; // it was actually a creation
+                                      break;
+
+            case kNoUncertainty:      break;
+          }
+          counter--;
+
+          // TODO: In fact, we may now face a remove-all-dupes
+          // TODO: vs remove a single dupe type of uncertainty.
+          // TODO: Must create a unit test
+          uncertainty = kNoUncertainty;
         }
         else if ( optype == kInsertion )
         { // key exists - include it
-          thereIsAnInsertOverwriteUncertainty = false;
+          switch( uncertainty ) {
+            case kInsertVsOverwrite:  break; // it was actually an overwrite
+            case kCreateVsDuplicate:  break; // it was actually a duplication
+            case kNoUncertainty:      break;
+          }
+          uncertainty = kNoUncertainty;
           counter++;
         }
         else if ( optype == kOverwritingInsertion )
         {
-          thereIsAnInsertOverwriteUncertainty = true;
+          switch( uncertainty ) {
+            case kInsertVsOverwrite:  break; // it was actually an overwrite
+            case kCreateVsDuplicate:  break; // it was actually a duplication
+            case kNoUncertainty:      break;
+          }
+          uncertainty = kInsertVsOverwrite;
         }
         else if ( optype == kDuplicatingInsertion )
         {
-          thereIsAnInsertOverwriteUncertainty = false;
-          // XXX: now there is a duplicate key uncertainty -
-          // XXX: was this key actually duplicated or not?
+          switch( uncertainty ) {
+            case kInsertVsOverwrite:  break; // it was actually an overwrite
+            case kCreateVsDuplicate:  break; // it was actually a duplication
+            case kNoUncertainty:      break;
+          }
+          uncertainty = kCreateVsDuplicate;
         }
       }
 
       // txn is still active - ignore it
     }
 
-    if ( thereIsAnInsertOverwriteUncertainty ) {
+    if ( uncertainty == kInsertVsOverwrite || uncertainty == kCreateVsDuplicate ) {
       // check if the key already exists in the btree - if yes,
       // we do not count it (it will be counted later)
       if (UPS_KEY_NOT_FOUND == be->find(context, 0, node->key(), 0, 0, 0, 0))
