@@ -470,6 +470,28 @@ TxnIndex::enumerate(Context *context, TxnIndex::Visitor *visitor)
 }
 
 struct KeyCounter : TxnIndex::Visitor {
+  enum OperationType {
+    kRemoval,
+    kInsertion,
+    kOverwritingInsertion,
+    kDuplicatingInsertion,
+    kNop
+  };
+
+  OperationType operation_type(uint32_t opflags) {
+    if (ISSET(opflags, TxnOperation::kErase))
+      return kRemoval;
+    else if (ISSET(opflags, TxnOperation::kInsert))
+      return kInsertion;
+    else if (ISSET(opflags, TxnOperation::kInsertOverwrite))
+      return kOverwritingInsertion;
+    else if (ISSET(opflags, TxnOperation::kInsertDuplicate))
+      return distinct ? kDuplicatingInsertion : kInsertion;
+
+    assert(ISSET(opflags, TxnOperation::kNop));
+    return kNop;
+  }
+
   KeyCounter(LocalDb *_db, LocalTxn *_txn, bool _distinct)
     : counter(0), distinct(_distinct), txn(_txn), db(_db) {
   }
@@ -507,47 +529,29 @@ struct KeyCounter : TxnIndex::Visitor {
         if (ISSET(op->flags, TxnOperation::kIsFlushed))
           break;
 
-        // if key was erased then it doesn't exist
-        if (ISSET(op->flags, TxnOperation::kErase)) {
+        const OperationType optype = operation_type(op->flags);
+
+        if ( optype == kRemoval )
+        { // if key was erased then it doesn't exist
           if ( thereIsAnInsertOverwriteUncertainty )
             thereIsAnInsertOverwriteUncertainty = false;
           else
             counter--;
-          continue;
         }
-
-        // key exists - include it
-        if (ISSET(op->flags, TxnOperation::kInsert)) {
+        else if ( optype == kInsertion )
+        { // key exists - include it
           thereIsAnInsertOverwriteUncertainty = false;
           counter++;
-          continue;
         }
-
-        if (ISSET(op->flags, TxnOperation::kInsertOverwrite)) {
+        else if ( optype == kOverwritingInsertion )
+        {
           thereIsAnInsertOverwriteUncertainty = true;
-          continue;
         }
-
-        if (ISSET(op->flags, TxnOperation::kInsertDuplicate)) {
-          // check if btree has other duplicates
-          if (0 == be->find(context, 0, node->key(), 0, 0, 0, 0)) {
-            // yes, there's another one
-            if (distinct)
-              return;
-            counter++;
-          }
-          else {
-            // check if other key is in this node
-            counter++;
-            if (distinct)
-              return;
-          }
-          continue;
-        }
-
-        if (NOTSET(op->flags, TxnOperation::kNop)) {
-          assert(!"shouldn't be here");
-          return;
+        else if ( optype == kDuplicatingInsertion )
+        {
+          thereIsAnInsertOverwriteUncertainty = false;
+          // XXX: now there is a duplicate key uncertainty -
+          // XXX: was this key actually duplicated or not?
         }
       }
 
@@ -561,6 +565,7 @@ struct KeyCounter : TxnIndex::Visitor {
         counter++;
     }
   }
+
 
   int64_t counter;
   bool distinct;
