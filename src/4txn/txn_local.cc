@@ -490,6 +490,12 @@ struct KeyCounter : TxnIndex::Visitor {
     // if keys are overwritten or a duplicate key is inserted, then
     // we have to consolidate the btree keys with the txn-tree keys.
     //
+    // When we see an insert-overwrite operation whether the counter
+    // must be incremented or not depends on whether the key existed
+    // at that time or not. This is an uncertainty that can be resolved
+    // only looking back earlier in the transaction history.
+    bool thereIsAnInsertOverwriteUncertainty = false;
+
     for (TxnOperation *op = node->newest_op;
                     op != 0;
                     op = op->previous_in_node) {
@@ -499,28 +505,27 @@ struct KeyCounter : TxnIndex::Visitor {
 
       if (optxn->is_committed() || txn == optxn) {
         if (ISSET(op->flags, TxnOperation::kIsFlushed))
-          continue; // XXX: what's the point of looking past flushed operations?
+          break;
 
         // if key was erased then it doesn't exist
         if (ISSET(op->flags, TxnOperation::kErase)) {
-          counter--;
-          return;
-        }
-
-        if (ISSET(op->flags, TxnOperation::kInsert)) {
-          counter++;
-          return;
+          if ( thereIsAnInsertOverwriteUncertainty )
+            thereIsAnInsertOverwriteUncertainty = false;
+          else
+            counter--;
+          continue;
         }
 
         // key exists - include it
-        if (ISSET(op->flags, TxnOperation::kInsert) //XXX: already handled above
-            || (ISSET(op->flags, TxnOperation::kInsertOverwrite))) {
-          // check if the key already exists in the btree - if yes,
-          // we do not count it (it will be counted later)
-          if (UPS_KEY_NOT_FOUND
-                    == be->find(context, 0, node->key(), 0, 0, 0, 0))
-            counter++;
-          return;
+        if (ISSET(op->flags, TxnOperation::kInsert)) {
+          thereIsAnInsertOverwriteUncertainty = false;
+          counter++;
+          continue;
+        }
+
+        if (ISSET(op->flags, TxnOperation::kInsertOverwrite)) {
+          thereIsAnInsertOverwriteUncertainty = true;
+          continue;
         }
 
         if (ISSET(op->flags, TxnOperation::kInsertDuplicate)) {
@@ -547,6 +552,13 @@ struct KeyCounter : TxnIndex::Visitor {
       }
 
       // txn is still active - ignore it
+    }
+
+    if ( thereIsAnInsertOverwriteUncertainty ) {
+      // check if the key already exists in the btree - if yes,
+      // we do not count it (it will be counted later)
+      if (UPS_KEY_NOT_FOUND == be->find(context, 0, node->key(), 0, 0, 0, 0))
+        counter++;
     }
   }
 
