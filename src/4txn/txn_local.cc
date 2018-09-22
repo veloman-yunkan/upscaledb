@@ -470,13 +470,6 @@ TxnIndex::enumerate(Context *context, TxnIndex::Visitor *visitor)
 }
 
 struct KeyCounter : TxnIndex::Visitor {
-  enum OperationType {
-    kRemoval,
-    kInsertion,
-    kOverwritingInsertion,
-    kDuplicatingInsertion,
-    kNop
-  };
 
   // While looking through the transaction history in reverse
   // chronological order we encounter uncertainties with respect
@@ -501,20 +494,6 @@ struct KeyCounter : TxnIndex::Visitor {
     // (this is an uncertainty when counting distinct keys)
     kCreateVsDuplicate
   };
-
-  OperationType operation_type(uint32_t opflags) {
-    if (ISSET(opflags, TxnOperation::kErase))
-      return kRemoval;
-    else if (ISSET(opflags, TxnOperation::kInsert))
-      return kInsertion;
-    else if (ISSET(opflags, TxnOperation::kInsertOverwrite))
-      return kOverwritingInsertion;
-    else if (ISSET(opflags, TxnOperation::kInsertDuplicate))
-      return distinct ? kDuplicatingInsertion : kInsertion;
-
-    assert(ISSET(opflags, TxnOperation::kNop));
-    return kNop;
-  }
 
   KeyCounter(LocalDb *_db, LocalTxn *_txn, bool _distinct)
     : counter(0), distinct(_distinct), txn(_txn), db(_db) {
@@ -548,9 +527,7 @@ struct KeyCounter : TxnIndex::Visitor {
         if (ISSET(op->flags, TxnOperation::kIsFlushed))
           break;
 
-        const OperationType optype = operation_type(op->flags);
-
-        if ( optype == kRemoval )
+        if ( ISSET(op->flags, TxnOperation::kErase) )
         { // if key was erased then it doesn't exist
           switch( uncertainty ) {
             case kInsertVsOverwrite:  counter++; // it was actually an insert
@@ -568,7 +545,7 @@ struct KeyCounter : TxnIndex::Visitor {
           // TODO: Must create a unit test
           uncertainty = kNoUncertainty;
         }
-        else if ( optype == kInsertion )
+        else if ( ISSET(op->flags, TxnOperation::kInsert) )
         { // key exists - include it
           switch( uncertainty ) {
             case kInsertVsOverwrite:  break; // it was actually an overwrite
@@ -578,7 +555,7 @@ struct KeyCounter : TxnIndex::Visitor {
           uncertainty = kNoUncertainty;
           counter++;
         }
-        else if ( optype == kOverwritingInsertion )
+        else if ( ISSET(op->flags, TxnOperation::kInsertOverwrite) )
         {
           switch( uncertainty ) {
             case kInsertVsOverwrite:  break; // it was actually an overwrite
@@ -587,14 +564,20 @@ struct KeyCounter : TxnIndex::Visitor {
           }
           uncertainty = kInsertVsOverwrite;
         }
-        else if ( optype == kDuplicatingInsertion )
+        else
         {
+          assert(ISSET(op->flags, TxnOperation::kInsertDuplicate));
           switch( uncertainty ) {
             case kInsertVsOverwrite:  break; // it was actually an overwrite
             case kCreateVsDuplicate:  break; // it was actually a duplication
             case kNoUncertainty:      break;
           }
-          uncertainty = kCreateVsDuplicate;
+          if ( distinct )
+            uncertainty = kCreateVsDuplicate;
+          else {
+            uncertainty = kNoUncertainty;
+            counter++;
+          }
         }
       }
 
