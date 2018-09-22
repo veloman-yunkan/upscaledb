@@ -529,16 +529,11 @@ struct KeyCounter : TxnIndex::Visitor {
 
         if ( ISSET(op->flags, TxnOperation::kErase) )
         { // if key was erased then it doesn't exist
-          switch( uncertainty ) {
-            case kInsertVsOverwrite:  counter++; // it was actually an insert
-                                      break;
-
-            case kCreateVsDuplicate:  counter++; // it was actually a creation
-                                      break;
-
-            case kNoUncertainty:      break;
-          }
-          counter--;
+          if( uncertainty == kNoUncertainty )
+            counter--;
+          // Otherwise the uncertainty about the existence of the key
+          // was incorrectly "handled" as if the key existed and therefore
+          // the counter was not incremented as it should.
 
           // TODO: In fact, we may now face a remove-all-dupes
           // TODO: vs remove a single dupe type of uncertainty.
@@ -547,34 +542,25 @@ struct KeyCounter : TxnIndex::Visitor {
         }
         else if ( ISSET(op->flags, TxnOperation::kInsert) )
         { // key exists - include it
-          switch( uncertainty ) {
-            case kInsertVsOverwrite:  break; // it was actually an overwrite
-            case kCreateVsDuplicate:  break; // it was actually a duplication
-            case kNoUncertainty:      break;
-          }
           uncertainty = kNoUncertainty;
           counter++;
         }
         else if ( ISSET(op->flags, TxnOperation::kInsertOverwrite) )
         {
-          switch( uncertainty ) {
-            case kInsertVsOverwrite:  break; // it was actually an overwrite
-            case kCreateVsDuplicate:  break; // it was actually a duplication
-            case kNoUncertainty:      break;
-          }
+          // Not incrementing the counter, assuming that the key
+          // existed and this was an overwrite, however remaining
+          // uncertain about it
           uncertainty = kInsertVsOverwrite;
         }
         else
         {
           assert(ISSET(op->flags, TxnOperation::kInsertDuplicate));
-          switch( uncertainty ) {
-            case kInsertVsOverwrite:  break; // it was actually an overwrite
-            case kCreateVsDuplicate:  break; // it was actually a duplication
-            case kNoUncertainty:      break;
-          }
-          if ( distinct )
+          if ( distinct ) {
+            // Not incrementing the counter, assuming that the key
+            // existed and this was an addition of a duplicate key,
+            // however remaining uncertain about it
             uncertainty = kCreateVsDuplicate;
-          else {
+          } else {
             uncertainty = kNoUncertainty;
             counter++;
           }
