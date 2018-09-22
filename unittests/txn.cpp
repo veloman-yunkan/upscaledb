@@ -15,7 +15,7 @@
  *
  * See the file COPYING for License information.
  */
- 
+
 
 #include "3rdparty/catch/catch.hpp"
 
@@ -158,7 +158,7 @@ struct TxnFixture : BaseFixture {
     ups_key_t key = ups_make_key((void *)"hello", 5);
     ups_record_t rec = {0};
 
-    // begin(T1); begin(T2); insert(T1, a); insert(T2, a) -> conflict 
+    // begin(T1); begin(T2); insert(T1, a); insert(T2, a) -> conflict
     REQUIRE(0 == ups_txn_begin(&txn1, env, 0, 0, 0));
     REQUIRE(0 == ups_txn_begin(&txn2, env, 0, 0, 0));
     REQUIRE(0 == ups_db_insert(db, txn1, &key, &rec, 0));
@@ -172,7 +172,7 @@ struct TxnFixture : BaseFixture {
     ups_key_t key = ups_make_key((void *)"hello", 5);
     ups_record_t rec = {0};
 
-    // begin(T1); begin(T2); insert(T1, a); insert(T2, a) -> duplicate 
+    // begin(T1); begin(T2); insert(T1, a); insert(T2, a) -> duplicate
     REQUIRE(0 == ups_txn_begin(&txn1, env, 0, 0, 0));
     REQUIRE(0 == ups_txn_begin(&txn2, env, 0, 0, 0));
     REQUIRE(0 == ups_db_insert(db, txn1, &key, &rec, 0));
@@ -187,7 +187,7 @@ struct TxnFixture : BaseFixture {
     ups_record_t rec = {0};
 
     // begin(T1); begin(T2); insert(T1, a); commit(T1);
-    // insert(T2, a, OW) -> ok 
+    // insert(T2, a, OW) -> ok
     REQUIRE(0 == ups_txn_begin(&txn1, env, 0, 0, 0));
     REQUIRE(0 == ups_txn_begin(&txn2, env, 0, 0, 0));
     REQUIRE(0 == ups_db_insert(db, txn1, &key, &rec, 0));
@@ -205,7 +205,7 @@ struct TxnFixture : BaseFixture {
     require_create(UPS_ENABLE_TRANSACTIONS, 0, UPS_ENABLE_DUPLICATES, 0);
 
     // begin(T1); begin(T2); insert(T1, a); commit(T1);
-    // insert(T2, a, DUP) -> ok 
+    // insert(T2, a, DUP) -> ok
     REQUIRE(0 == ups_txn_begin(&txn1, env, 0, 0, 0));
     REQUIRE(0 == ups_txn_begin(&txn2, env, 0, 0, 0));
     REQUIRE(0 == ups_db_insert(db, txn1, &key, &rec, 0));
@@ -220,7 +220,7 @@ struct TxnFixture : BaseFixture {
     ups_record_t rec = {0};
 
     // begin(T1); begin(T2); insert(T1, a); abort(T1);
-    // insert(T2, a) 
+    // insert(T2, a)
     REQUIRE(0 == ups_txn_begin(&txn1, env, 0, 0, 0));
     REQUIRE(0 == ups_txn_begin(&txn2, env, 0, 0, 0));
     REQUIRE(0 == ups_db_insert(db, txn1, &key, &rec, 0));
@@ -235,7 +235,7 @@ struct TxnFixture : BaseFixture {
     ups_record_t rec = ups_make_record((void *)"world", 5);
     ups_record_t rec2 = {0};
 
-    // begin(T1); begin(T2); insert(T1, a); commit(T1); find(T2, a) -> ok 
+    // begin(T1); begin(T2); insert(T1, a); commit(T1); find(T2, a) -> ok
     REQUIRE(0 == ups_txn_begin(&txn1, env, 0, 0, 0));
     REQUIRE(0 == ups_txn_begin(&txn2, env, 0, 0, 0));
     REQUIRE(0 == ups_db_insert(db, txn1, &key, &rec, 0));
@@ -253,7 +253,7 @@ struct TxnFixture : BaseFixture {
     ups_record_t rec = ups_make_record((void *)"world", 5);
     ups_record_t rec2 = {0};
 
-    // begin(T1); begin(T2); insert(T1, a); insert(T2, a) -> conflict 
+    // begin(T1); begin(T2); insert(T1, a); insert(T2, a) -> conflict
     REQUIRE(0 == ups_txn_begin(&txn1, env, 0, 0, 0));
     REQUIRE(0 == ups_txn_begin(&txn2, env, 0, 0, 0));
     REQUIRE(0 == ups_db_insert(db, txn1, &key, &rec, 0));
@@ -269,7 +269,7 @@ struct TxnFixture : BaseFixture {
     ups_record_t rec2 = {0};
 
     // begin(T1); begin(T2); insert(T1, a); commit(T1);
-    // commit(T2); find(temp, a) -> ok 
+    // commit(T2); find(temp, a) -> ok
     REQUIRE(0 == ups_txn_begin(&txn1, env, 0, 0, 0));
     REQUIRE(0 == ups_txn_begin(&txn2, env, 0, 0, 0));
     REQUIRE(0 == ups_db_insert(db, txn1, &key, &rec, 0));
@@ -287,7 +287,7 @@ struct TxnFixture : BaseFixture {
     ups_record_t rec = {0};
 
     // begin(T1); begin(T2); insert(T1, a); abort(T1);
-    // find(T2, a) -> fail 
+    // find(T2, a) -> fail
     REQUIRE(0 == ups_txn_begin(&txn1, env, 0, 0, 0));
     REQUIRE(0 == ups_txn_begin(&txn2, env, 0, 0, 0));
     REQUIRE(0 == ups_db_insert(db, txn1, &key, &rec, 0));
@@ -304,7 +304,7 @@ struct TxnFixture : BaseFixture {
     ups_record_t rec = {0};
 
     // begin(T1); begin(T2); insert(T1, a); commit(T1);
-    // find(T2, c) -> fail 
+    // find(T2, c) -> fail
     REQUIRE(0 == ups_txn_begin(&txn1, env, 0, 0, 0));
     REQUIRE(0 == ups_txn_begin(&txn2, env, 0, 0, 0));
     REQUIRE(0 == ups_db_insert(db, txn1, &key, &rec, 0));
@@ -320,7 +320,7 @@ struct TxnFixture : BaseFixture {
     ups_record_t rec2 = {0};
 
     // begin(T1); begin(T2); insert(T1, a); commit(T1); erase(T2, a);
-    // find(T2, a) -> fail 
+    // find(T2, a) -> fail
     REQUIRE(0 == ups_txn_begin(&txn1, env, 0, 0, 0));
     REQUIRE(0 == ups_txn_begin(&txn2, env, 0, 0, 0));
     REQUIRE(0 == ups_db_insert(db, txn1, &key, &rec, 0));
@@ -338,7 +338,7 @@ struct TxnFixture : BaseFixture {
     ups_record_t rec2 = {0};
 
     // begin(T1); begin(T2); insert(T1, a); commit(T1); commit(T2);
-    // erase(T3, a) -> ok; find(T2, a) -> fail 
+    // erase(T3, a) -> ok; find(T2, a) -> fail
     REQUIRE(0 == ups_txn_begin(&txn1, env, 0, 0, 0));
     REQUIRE(0 == ups_txn_begin(&txn2, env, 0, 0, 0));
     REQUIRE(0 == ups_db_insert(db, txn1, &key, &rec, 0));
@@ -355,7 +355,7 @@ struct TxnFixture : BaseFixture {
     ups_record_t rec = ups_make_record((void *)"world", 5);
 
     // begin(T1); begin(T2); insert(T1, a); abort(T1); erase(T2, a) -> fail;
-    // commit(T2); 
+    // commit(T2);
     REQUIRE(0 == ups_txn_begin(&txn1, env, 0, 0, 0));
     REQUIRE(0 == ups_txn_begin(&txn2, env, 0, 0, 0));
     REQUIRE(0 == ups_db_insert(db, txn1, &key, &rec, 0));
@@ -371,7 +371,7 @@ struct TxnFixture : BaseFixture {
     ups_record_t rec2 = {0};
 
     // begin(T1); begin(T2); insert(T1, a); erase(T1, a); -> ok;
-    // commit(T2); 
+    // commit(T2);
     REQUIRE(0 == ups_txn_begin(&txn1, env, 0, 0, 0));
     REQUIRE(0 == ups_txn_begin(&txn2, env, 0, 0, 0));
     REQUIRE(0 == ups_db_insert(db, txn1, &key, &rec, 0));
@@ -601,7 +601,7 @@ struct HighLevelTxnFixture : BaseFixture {
     ups_cursor_t *cursor, *clone;
 
     require_create(UPS_ENABLE_TRANSACTIONS);
-            
+
     REQUIRE(0 == ups_txn_begin(&txn, ups_db_get_env(db), 0, 0, 0));
     REQUIRE(0 == ups_cursor_create(&cursor, db, txn, 0));
     REQUIRE(0 == ups_cursor_clone(cursor, &clone));
@@ -732,13 +732,13 @@ struct HighLevelTxnFixture : BaseFixture {
 
     require_create(UPS_ENABLE_TRANSACTIONS);
 
-    // without txn 
+    // without txn
     REQUIRE(0 == insert(0, "key1", "rec1", 0));
     REQUIRE(0 == find(0, "key1", "rec1"));
     REQUIRE(0 == ups_db_count(db, 0, 0, &count));
     REQUIRE(1ull == count);
 
-    // in an active txn 
+    // in an active txn
     REQUIRE(0 == ups_txn_begin(&txn, ups_db_get_env(db), 0, 0, 0));
     REQUIRE(0 == ups_db_count(db, txn, 0, &count));
     REQUIRE(1ull == count);
@@ -753,18 +753,18 @@ struct HighLevelTxnFixture : BaseFixture {
     REQUIRE(0 == ups_txn_commit(txn, 0));
     REQUIRE(0 == find(0, "key2", "rec2"));
 
-    // after commit 
+    // after commit
     REQUIRE(0 == ups_db_count(db, 0, 0, &count));
     REQUIRE(2ull == count);
 
-    // in temp. txn 
+    // in temp. txn
     REQUIRE(0 == ups_txn_begin(&txn, ups_db_get_env(db), 0, 0, 0));
     REQUIRE(0 == insert(txn, "key3", "rec1", 0));
     REQUIRE(0 == ups_db_count(db, txn, 0, &count));
     REQUIRE(3ull == count);
     REQUIRE(0 == ups_txn_abort(txn, 0));
 
-    // after abort 
+    // after abort
     REQUIRE(0 == ups_db_count(db, 0, 0, &count));
     REQUIRE(2ull == count);
   }
@@ -775,13 +775,13 @@ struct HighLevelTxnFixture : BaseFixture {
 
     require_create(UPS_ENABLE_TRANSACTIONS, 0, UPS_ENABLE_DUPLICATES, 0);
 
-    // without txn 
+    // without txn
     REQUIRE(0 == insert(0, "key1", "rec1", 0));
     REQUIRE(0 == insert(0, "key2", "rec1", 0));
     REQUIRE(0 == ups_db_count(db, 0, 0, &count));
     REQUIRE(2ull == count);
 
-    // in an active txn 
+    // in an active txn
     REQUIRE(0 == ups_txn_begin(&txn, ups_db_get_env(db), 0, 0, 0));
     REQUIRE(0 == ups_db_count(db, txn, 0, &count));
     REQUIRE(2ull == count);
@@ -793,11 +793,37 @@ struct HighLevelTxnFixture : BaseFixture {
     REQUIRE(3ull == count);
     REQUIRE(0 == ups_txn_commit(txn, 0));
 
-    // after commit 
+    // after commit
     REQUIRE(0 == ups_db_count(db, 0, 0, &count));
     REQUIRE(4ull == count);
     REQUIRE(0 == ups_db_count(db, 0, UPS_SKIP_DUPLICATES, &count));
     REQUIRE(3ull == count);
+
+    // Insert with UPS_DUPLICATE when there is no duplicate
+
+    // in an active txn
+    REQUIRE(0 == ups_txn_begin(&txn, ups_db_get_env(db), 0, 0, 0));
+    REQUIRE(0 == ups_db_count(db, txn, 0, &count));
+    REQUIRE(4ull == count);
+    REQUIRE(0 == ups_db_count(db, txn, UPS_SKIP_DUPLICATES, &count));
+    REQUIRE(3ull == count);
+    REQUIRE(0 == insert(txn, "key4", "rec5", UPS_DUPLICATE));
+    REQUIRE(0 == ups_db_count(db, txn, 0, &count));
+    REQUIRE(5ull == count);
+    REQUIRE(0 == ups_db_count(db, txn, UPS_SKIP_DUPLICATES, &count));
+    REQUIRE(4ull == count);
+    REQUIRE(0 == insert(txn, "key4", "rec6", UPS_DUPLICATE));
+    REQUIRE(0 == ups_db_count(db, txn, 0, &count));
+    REQUIRE(6ull == count);
+    REQUIRE(0 == ups_db_count(db, txn, UPS_SKIP_DUPLICATES, &count));
+    REQUIRE(4ull == count);
+    REQUIRE(0 == ups_txn_commit(txn, 0));
+
+    // after commit
+    REQUIRE(0 == ups_db_count(db, 0, 0, &count));
+    REQUIRE(6ull == count);
+    REQUIRE(0 == ups_db_count(db, 0, UPS_SKIP_DUPLICATES, &count));
+    REQUIRE(4ull == count);
   }
 
   void getKeyCountOverwriteTest() {
@@ -806,13 +832,13 @@ struct HighLevelTxnFixture : BaseFixture {
 
     require_create(UPS_ENABLE_TRANSACTIONS);
 
-    // without txn 
+    // without txn
     REQUIRE(0 == insert(0, "key1", "rec1", 0));
     REQUIRE(0 == insert(0, "key2", "rec1", 0));
     REQUIRE(0 == ups_db_count(db, 0, 0, &count));
     REQUIRE(2ull == count);
 
-    // in an active txn 
+    // in an active txn
     REQUIRE(0 == ups_txn_begin(&txn, ups_db_get_env(db), 0, 0, 0));
     REQUIRE(0 == ups_db_count(db, txn, 0, &count));
     REQUIRE(2ull == count);
@@ -829,7 +855,7 @@ struct HighLevelTxnFixture : BaseFixture {
     REQUIRE(3ull == count);
     REQUIRE(0 == ups_txn_commit(txn, 0));
 
-    // after commit 
+    // after commit
     REQUIRE(0 == ups_db_count(db, 0, 0, &count));
     REQUIRE(3ull == count);
     REQUIRE(0 == ups_db_count(db, 0, UPS_SKIP_DUPLICATES, &count));
