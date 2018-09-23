@@ -291,6 +291,30 @@ check_insert_conflicts(LocalDb *db, Context *context, TxnNode *node,
   }
 }
 
+static inline bool
+key_is_configured_for_exact_match_lookup(ups_key_t *key) {
+  return NOTSET(ups_key_get_intflags(key), BtreeKey::kApproximate);
+}
+
+static inline bool
+key_is_configured_for_approximate_lookup(ups_key_t *key) {
+  return ISSETANY(ups_key_get_intflags(key), BtreeKey::kApproximate);
+}
+
+static inline void
+configure_key_for_approximate_lookup(ups_key_t *key) {
+  ups_key_set_intflags(key,
+                    (ups_key_get_intflags(key) | BtreeKey::kApproximate));
+}
+
+static inline void
+configure_key_for_exact_match_lookup(ups_key_t *key) {
+  ups_key_set_intflags(key,
+        (ups_key_get_intflags(key) & (~BtreeKey::kApproximate)));
+}
+
+
+
 // Lookup of a key/record pair in the Txn index and in the btree,
 // if transactions are disabled/not successful; copies the
 // record into |record|. Also performs approx. matching.
@@ -305,8 +329,7 @@ find_txn(LocalDb *db, Context *context, LocalCursor *cursor, ups_key_t *key,
   ByteArray *key_arena = &db->key_arena(context->txn);
   ByteArray *record_arena = &db->record_arena(context->txn);
 
-  ups_key_set_intflags(key,
-        (ups_key_get_intflags(key) & (~BtreeKey::kApproximate)));
+  configure_key_for_exact_match_lookup(key);
 
   // cursor: reset the dupecache, set to nil
   if (cursor)
@@ -349,7 +372,7 @@ retry:
         if (cursor)
           cursor->activate_txn(op);
         // approx match? leave the loop and continue with the btree
-        if (ISSETANY(ups_key_get_intflags(key), BtreeKey::kApproximate))
+        if (key_is_configured_for_approximate_lookup(key))
           break;
         // otherwise copy the record and return
         if (likely(record != 0))
@@ -363,22 +386,20 @@ retry:
       // if an approximate match is requested then move to the next
       // or previous node
       if (ISSET(op->flags, TxnOperation::kErase)) {
-        if (NOTSET(ups_key_get_intflags(key), BtreeKey::kApproximate))
+        if (key_is_configured_for_exact_match_lookup(key))
           exact_is_erased = true;
         if (ISSET(flags, UPS_FIND_LT_MATCH)) {
           node = node->previous_sibling();
           if (!node)   // XXX: what if UPS_FIND_GT_MATCH is also requested
             break;     // XXX: and node->next_sibling() exists?
-          ups_key_set_intflags(key,
-              (ups_key_get_intflags(key) | BtreeKey::kApproximate));
+          configure_key_for_approximate_lookup(key);
           goto retry;
         }
         if (ISSET(flags, UPS_FIND_GT_MATCH)) {
           node = node->next_sibling();
           if (!node)
             break;
-          ups_key_set_intflags(key,
-              (ups_key_get_intflags(key) | BtreeKey::kApproximate));
+          configure_key_for_approximate_lookup(key);
           goto retry;
         }
         // if a duplicate was deleted then check if there are other duplicates
@@ -412,8 +433,7 @@ retry:
 
   // if there was an approximate match: check if the btree provides
   // a better match
-  if (unlikely(op
-          && ISSETANY(ups_key_get_intflags(key), BtreeKey::kApproximate))) {
+  if (unlikely(op && key_is_configured_for_approximate_lookup(key))) {
     ups_key_set_intflags(key, 0);
 
     // create a duplicate of the key
@@ -456,7 +476,7 @@ retry:
       return st;
 
     // the btree key is a direct match? then return it
-    if (NOTSET(ups_key_get_intflags(key), BtreeKey::kApproximate)
+    if (key_is_configured_for_exact_match_lookup(key)
           && ISSET(flags, UPS_FIND_EQ_MATCH)
           && !exact_is_erased) {
       if (cursor)
@@ -1291,7 +1311,7 @@ LocalDb::bulk_operations(Txn *txn, ups_operation_t *ops, size_t ops_length,
         ops->result = find(0, txn, &ops->key, &ops->record, ops->flags);
         if (likely(ops->result == 0)) {
           // copy key if approx. matching was used
-          if (ISSETANY(ups_key_get_intflags(&ops->key), BtreeKey::kApproximate)
+          if (key_is_configured_for_approximate_lookup(&ops->key)
                   && NOTSET(ops->key.flags, UPS_KEY_USER_ALLOC)) {
             ka.append((uint8_t *)ops->key.data, ops->key.size);
           }
@@ -1330,7 +1350,7 @@ LocalDb::bulk_operations(Txn *txn, ups_operation_t *ops, size_t ops_length,
         break;
       case UPS_OP_FIND:
         // copy key if approx. matching was used
-        if (ISSETANY(ups_key_get_intflags(&ops->key), BtreeKey::kApproximate)
+        if (key_is_configured_for_approximate_lookup(&ops->key)
                   && NOTSET(ops->key.flags, UPS_KEY_USER_ALLOC)) {
           ops->key.data = kptr;
           kptr += ops->key.size;
