@@ -132,6 +132,14 @@ is_modified_by_active_transaction(TxnIndex *txn_index)
 }
 
 static inline bool
+is_an_insertion(const TxnOperation* op) {
+  return ISSETANY(op->flags, TxnOperation::kInsert
+                             | TxnOperation::kInsertOverwrite
+                             | TxnOperation::kInsertDuplicate);
+}
+
+
+static inline bool
 is_key_erased(Context *context, TxnIndex *txn_index, ups_key_t *key)
 {
   // get the node for this key (but don't create a new one if it does
@@ -154,9 +162,7 @@ is_key_erased(Context *context, TxnIndex *txn_index, ups_key_t *key)
         // TODO does not check duplicates!!
         return true;
       }
-      if (ISSETANY(op->flags, TxnOperation::kInsert
-                                    | TxnOperation::kInsertOverwrite
-                                    | TxnOperation::kInsertDuplicate))
+      if (is_an_insertion(op))
         return false;
     }
   }
@@ -197,9 +203,7 @@ check_erase_conflicts(LocalDb *db, Context *context, TxnNode *node,
         return UPS_KEY_NOT_FOUND;
       // if the key already exists then we can only continue if
       // we're allowed to overwrite it or to insert a duplicate
-      if (ISSETANY(op->flags, TxnOperation::kInsert
-                                    | TxnOperation::kInsertOverwrite
-                                    | TxnOperation::kInsertDuplicate))
+      if (is_an_insertion(op))
         return 0;
       if (NOTSET(op->flags, TxnOperation::kNop)) {
         assert(!"shouldn't be here");
@@ -252,9 +256,7 @@ check_insert_conflicts(LocalDb *db, Context *context, TxnNode *node,
         return 0;
       /* if the key already exists then we can only continue if
        * we're allowed to overwrite it or to insert a duplicate */
-      if (ISSETANY(op->flags, TxnOperation::kInsert
-                                    | TxnOperation::kInsertOverwrite
-                                    | TxnOperation::kInsertDuplicate)) {
+      if (is_an_insertion(op)) {
         if (ISSETANY(flags, UPS_OVERWRITE | UPS_DUPLICATE))
           return 0;
         return UPS_DUPLICATE_KEY;
@@ -314,7 +316,6 @@ configure_key_for_exact_match_lookup(ups_key_t *key) {
 }
 
 
-
 // Lookup of a key/record pair in the Txn index and in the btree,
 // if transactions are disabled/not successful; copies the
 // record into |record|. Also performs approx. matching.
@@ -366,9 +367,7 @@ retry:
       // if the key already exists then return its record; do not
       // return pointers to TxnOperation::get_record, because it may be
       // flushed and the user's pointers would be invalid
-      if (ISSETANY(op->flags, TxnOperation::kInsert
-                                | TxnOperation::kInsertOverwrite
-                                | TxnOperation::kInsertDuplicate)) {
+      if (is_an_insertion(op)) {
         if (cursor)
           cursor->activate_txn(op);
         // approx match? leave the loop and continue with the btree
@@ -1644,9 +1643,7 @@ LocalDb::flush_txn_operation(Context *context, LocalTxn *txn, TxnOperation *op)
   // which are coupled to this op have to be uncoupled, and must be coupled
   // to the btree item instead.
   //
-  if (ISSETANY(op->flags, TxnOperation::kInsert
-                                | TxnOperation::kInsertOverwrite
-                                | TxnOperation::kInsertDuplicate)) {
+  if (is_an_insertion(op)) {
     uint32_t additional_flag =
       ISSET(op->flags, TxnOperation::kInsertDuplicate)
           ? UPS_DUPLICATE
