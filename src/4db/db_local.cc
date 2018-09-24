@@ -354,6 +354,7 @@ private: // functions
 
   Status search_in_txn_ops(ups_key_t *key, ups_record_t *record, uint32_t flags);
   Status check_txn_node_ops(ups_key_t *key, TxnNode* node, ups_record_t *record, uint32_t flags);
+  Status handle_key_erased_in_a_transaction(ups_key_t *key, uint32_t flags);
   ups_status_t check_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   ups_status_t check_for_a_better_match_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   ups_status_t find_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
@@ -462,34 +463,7 @@ FindTxn::check_txn_node_ops(ups_key_t *key, TxnNode* node, ups_record_t *record,
       // if an approximate match is requested then move to the next
       // or previous node
       if (ISSET(op->flags, TxnOperation::kErase)) {
-        if (key_is_configured_for_exact_match_lookup(key))
-          exact_is_erased = true;
-        if (ISSET(flags, UPS_FIND_LT_MATCH)) {
-          configure_key_for_approximate_lookup(key);
-          return TRY_PREVIOUS_NODE; // XXX: what if UPS_FIND_GT_MATCH is also
-                                    // XXX: requested, previous node doesn't
-                                    // XXX: exist but the next node exists?
-        }
-        if (ISSET(flags, UPS_FIND_GT_MATCH)) {
-          configure_key_for_approximate_lookup(key);
-          return TRY_NEXT_NODE;
-        }
-        // if a duplicate was deleted then check if there are other duplicates
-        // left
-        if (cursor)
-          cursor->activate_txn(op);
-        if (op->referenced_duplicate > 1) {
-          // not the first dupe - there are other dupes
-          return SUCCESS;
-        }
-        if (op->referenced_duplicate == 1) {
-          // check if there are other dupes
-          cursor->synchronize(context, LocalCursor::kSyncOnlyEqualKeys);
-          return cursor->duplicate_cache_count(context) > 0
-                    ? SUCCESS
-                    : KEY_NOT_FOUND;
-        }
-        return KEY_NOT_FOUND;
+        return handle_key_erased_in_a_transaction(key, flags);
       }
 
       if (unlikely(NOTSET(op->flags, TxnOperation::kNop))) {
@@ -503,6 +477,39 @@ FindTxn::check_txn_node_ops(ups_key_t *key, TxnNode* node, ups_record_t *record,
     return TXN_CONFLICT;
   }
   return CHECK_BTREE;
+}
+
+FindTxn::Status
+FindTxn::handle_key_erased_in_a_transaction(ups_key_t *key, uint32_t flags)
+{
+  if (key_is_configured_for_exact_match_lookup(key))
+    exact_is_erased = true;
+  if (ISSET(flags, UPS_FIND_LT_MATCH)) {
+    configure_key_for_approximate_lookup(key);
+    return TRY_PREVIOUS_NODE; // XXX: what if UPS_FIND_GT_MATCH is also
+                              // XXX: requested, previous node doesn't
+                              // XXX: exist but the next node exists?
+  }
+  if (ISSET(flags, UPS_FIND_GT_MATCH)) {
+    configure_key_for_approximate_lookup(key);
+    return TRY_NEXT_NODE;
+  }
+  // if a duplicate was deleted then check if there are other duplicates
+  // left
+  if (cursor)
+    cursor->activate_txn(op);
+  if (op->referenced_duplicate > 1) {
+    // not the first dupe - there are other dupes
+    return SUCCESS;
+  }
+  if (op->referenced_duplicate == 1) {
+    // check if there are other dupes
+    cursor->synchronize(context, LocalCursor::kSyncOnlyEqualKeys);
+    return cursor->duplicate_cache_count(context) > 0
+      ? SUCCESS
+      : KEY_NOT_FOUND;
+  }
+  return KEY_NOT_FOUND;
 }
 
 ups_status_t
