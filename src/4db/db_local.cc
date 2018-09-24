@@ -332,7 +332,9 @@ private: // types
     SUCCESS,
     KEY_NOT_FOUND,
     TXN_CONFLICT,
-    CHECK_BTREE
+    CHECK_BTREE,
+    TRY_PREVIOUS_NODE,
+    TRY_NEXT_NODE
   };
 
 public: // functions
@@ -351,6 +353,8 @@ private: // functions
   }
 
   Status search_in_txn_ops(ups_key_t *key, ups_record_t *record, uint32_t flags);
+  Status check_txn_node_ops(ups_key_t *key, TxnNode* node, ups_record_t *record, uint32_t flags);
+  ups_status_t check_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   ups_status_t check_for_a_better_match_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   ups_status_t find_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
 };
@@ -371,9 +375,13 @@ FindTxn::find(ups_key_t *key, ups_record_t *record, uint32_t flags)
     case SUCCESS:       return UPS_SUCCESS;
     case KEY_NOT_FOUND: return UPS_KEY_NOT_FOUND;
     case TXN_CONFLICT:  return UPS_TXN_CONFLICT;
-    case CHECK_BTREE:   break;
+    case CHECK_BTREE:   return check_btree(key, record, flags);
   }
+}
 
+ups_status_t
+FindTxn::check_btree(ups_key_t *key, ups_record_t *record, uint32_t flags)
+{
   // if there was an approximate match: check if the btree provides
   // a better match
   if (unlikely(there_was_an_approximate_match(key))) {
@@ -397,6 +405,21 @@ FindTxn::search_in_txn_ops(ups_key_t *key, ups_record_t *record, uint32_t flags)
   // not yet exist)
   TxnNode *node = db->txn_index->get(key, flags);
 
+  while ( node ) {
+    const Status st = check_txn_node_ops(key, node, record, flags);
+    switch ( st )
+    {
+      case TRY_PREVIOUS_NODE: node = node->previous_sibling(); break;
+      case TRY_NEXT_NODE:     node = node->next_sibling();     break;
+      default:                return st;
+    }
+  }
+  return CHECK_BTREE;
+}
+
+FindTxn::Status
+FindTxn::check_txn_node_ops(ups_key_t *key, TxnNode* node, ups_record_t *record, uint32_t flags)
+{
   //
   // pick the node of this key, and walk through each operation
   // in reverse chronological order (from newest to oldest):
@@ -408,11 +431,8 @@ FindTxn::search_in_txn_ops(ups_key_t *key, ups_record_t *record, uint32_t flags)
   // - if a committed txn has erased the item then there's no need
   //    to continue checking older, committed txns
   //
-retry:
-  if (node)
-    op = node->newest_op;
 
-  for (; op != 0; op = op->previous_in_node) {
+  for (op = node->newest_op; op != 0; op = op->previous_in_node) {
     Txn *optxn = op->txn;
     if (optxn->is_aborted())
       continue;
@@ -445,18 +465,14 @@ retry:
         if (key_is_configured_for_exact_match_lookup(key))
           exact_is_erased = true;
         if (ISSET(flags, UPS_FIND_LT_MATCH)) {
-          node = node->previous_sibling();
-          if (!node)   // XXX: what if UPS_FIND_GT_MATCH is also requested
-            break;     // XXX: and node->next_sibling() exists?
           configure_key_for_approximate_lookup(key);
-          goto retry;
+          return TRY_PREVIOUS_NODE; // XXX: what if UPS_FIND_GT_MATCH is also
+                                    // XXX: requested, previous node doesn't
+                                    // XXX: exist but the next node exists?
         }
         if (ISSET(flags, UPS_FIND_GT_MATCH)) {
-          node = node->next_sibling();
-          if (!node)
-            break;
           configure_key_for_approximate_lookup(key);
-          goto retry;
+          return TRY_NEXT_NODE;
         }
         // if a duplicate was deleted then check if there are other duplicates
         // left
