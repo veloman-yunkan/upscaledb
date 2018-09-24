@@ -354,6 +354,7 @@ private: // functions
 
   Status search_in_txn_ops(ups_key_t *key, ups_record_t *record, uint32_t flags);
   Status check_txn_node_ops(ups_key_t *key, TxnNode* node, ups_record_t *record, uint32_t flags);
+  Status handle_key_inserted_in_a_transaction(ups_key_t *key, ups_record_t *record);
   Status handle_key_erased_in_a_transaction(ups_key_t *key, uint32_t flags);
   ups_status_t check_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   ups_status_t check_for_a_better_match_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
@@ -446,15 +447,7 @@ FindTxn::check_txn_node_ops(ups_key_t *key, TxnNode* node, ups_record_t *record,
       // return pointers to TxnOperation::get_record, because it may be
       // flushed and the user's pointers would be invalid
       if (is_an_insertion(op)) {
-        if (cursor)
-          cursor->activate_txn(op);
-        // approx match? leave the loop and continue with the btree
-        if (key_is_configured_for_approximate_lookup(key))
-          break;
-        // otherwise copy the record and return
-        if (likely(record != 0))
-          copy_record(db, context->txn, op, record);
-        return SUCCESS;
+        return handle_key_inserted_in_a_transaction(key, record);
       }
 
       // if key was erased then it doesn't exist and we can return
@@ -477,6 +470,20 @@ FindTxn::check_txn_node_ops(ups_key_t *key, TxnNode* node, ups_record_t *record,
     return TXN_CONFLICT;
   }
   return CHECK_BTREE;
+}
+
+FindTxn::Status
+FindTxn::handle_key_inserted_in_a_transaction(ups_key_t *key, ups_record_t *record)
+{
+  if (cursor)
+    cursor->activate_txn(op);
+  // approx match? leave the loop and continue with the btree
+  if (key_is_configured_for_approximate_lookup(key))
+    return CHECK_BTREE;
+  // otherwise copy the record and return
+  if (likely(record != 0))
+    copy_record(db, context->txn, op, record);
+  return SUCCESS;
 }
 
 FindTxn::Status
