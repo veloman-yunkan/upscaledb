@@ -358,6 +358,7 @@ private: // functions
   Status handle_key_erased_in_a_transaction(ups_key_t *key, uint32_t flags);
   ups_status_t check_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   ups_status_t check_for_a_better_match_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
+  ups_status_t find_non_erased_key_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   ups_status_t find_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
 };
 
@@ -443,18 +444,10 @@ FindTxn::check_txn_node_ops(ups_key_t *key, TxnNode* node, ups_record_t *record,
       if (unlikely(ISSET(op->flags, TxnOperation::kIsFlushed)))
         continue; // XXX: why are flushed operations simply ignored???
 
-      // if the key already exists then return its record; do not
-      // return pointers to TxnOperation::get_record, because it may be
-      // flushed and the user's pointers would be invalid
       if (is_an_insertion(op)) {
         return handle_key_inserted_in_a_transaction(key, record);
       }
 
-      // if key was erased then it doesn't exist and we can return
-      // immediately
-      //
-      // if an approximate match is requested then move to the next
-      // or previous node
       if (ISSET(op->flags, TxnOperation::kErase)) {
         return handle_key_erased_in_a_transaction(key, flags);
       }
@@ -480,7 +473,8 @@ FindTxn::handle_key_inserted_in_a_transaction(ups_key_t *key, ups_record_t *reco
   // approx match? leave the loop and continue with the btree
   if (key_is_configured_for_approximate_lookup(key))
     return CHECK_BTREE;
-  // otherwise copy the record and return
+  // Do not return pointers to TxnOperation::get_record, because it may be
+  // flushed and the user's pointers would be invalid
   if (likely(record != 0))
     copy_record(db, context->txn, op, record);
   return SUCCESS;
@@ -491,6 +485,8 @@ FindTxn::handle_key_erased_in_a_transaction(ups_key_t *key, uint32_t flags)
 {
   if (key_is_configured_for_exact_match_lookup(key))
     exact_is_erased = true;
+  // if an approximate match is requested then move to the next
+  // or previous node
   if (ISSET(flags, UPS_FIND_LT_MATCH)) {
     configure_key_for_approximate_lookup(key);
     return TRY_PREVIOUS_NODE; // XXX: what if UPS_FIND_GT_MATCH is also
@@ -520,22 +516,15 @@ FindTxn::handle_key_erased_in_a_transaction(ups_key_t *key, uint32_t flags)
 }
 
 ups_status_t
-FindTxn::check_for_a_better_match_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags)
+FindTxn::find_non_erased_key_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags)
 {
   ups_status_t st = 0;
-  ByteArray *key_arena = &db->key_arena(context->txn);
-  ByteArray *record_arena = &db->record_arena(context->txn);
 
   ups_key_set_intflags(key, 0);
 
-  // create a duplicate of the key
-  ups_key_t *source = op->node->key();
-  ups_key_t copy = ups_make_key(::alloca(source->size), source->size);
-  copy._flags = BtreeKey::kApproximate;
-  ::memcpy(copy.data, source->data, source->size);
+  ByteArray *key_arena = &db->key_arena(context->txn);
+  ByteArray *record_arena = &db->record_arena(context->txn);
 
-  // now lookup in the btree, but make sure that the retrieved key was
-  // not deleted or overwritten in a transaction
   bool first_run = true;
   do {
     uint32_t new_flags = flags;
@@ -552,6 +541,19 @@ FindTxn::check_for_a_better_match_in_btree(ups_key_t *key, ups_record_t *record,
       break;
     exact_is_erased = is_key_erased(context, db->txn_index.get(), key);
   } while (exact_is_erased);
+  return st;
+}
+
+ups_status_t
+FindTxn::check_for_a_better_match_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags)
+{
+  ups_status_t st = find_non_erased_key_in_btree(key, record, flags);
+
+  // create a duplicate of the key
+  ups_key_t *source = op->node->key();
+  ups_key_t copy = ups_make_key(::alloca(source->size), source->size);
+  copy._flags = BtreeKey::kApproximate;
+  ::memcpy(copy.data, source->data, source->size);
 
   // if the key was not found in the btree: return the key which was found
   // in the transaction tree
