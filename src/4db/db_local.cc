@@ -360,6 +360,7 @@ private: // functions
   ups_status_t check_for_a_better_match_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   ups_status_t find_non_erased_key_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   ups_status_t find_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
+  void use_txn_result(ups_key_t *key, ups_record_t *record);
 };
 
 // Lookup of a key/record pair in the Txn index and in the btree,
@@ -544,25 +545,26 @@ FindTxn::find_non_erased_key_in_btree(ups_key_t *key, ups_record_t *record, uint
   return st;
 }
 
+void
+FindTxn::use_txn_result(ups_key_t *key, ups_record_t *record)
+{
+  if (cursor)
+    cursor->activate_txn(op);
+
+  copy_key(db, context->txn, op->node->key(), key);
+  key->_flags = BtreeKey::kApproximate;
+
+  if (likely(record != 0))
+    copy_record(db, context->txn, op, record);
+}
+
 ups_status_t
 FindTxn::check_for_a_better_match_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags)
 {
   ups_status_t st = find_non_erased_key_in_btree(key, record, flags);
 
-  // create a duplicate of the key
-  ups_key_t *source = op->node->key();
-  ups_key_t copy = ups_make_key(::alloca(source->size), source->size);
-  copy._flags = BtreeKey::kApproximate;
-  ::memcpy(copy.data, source->data, source->size);
-
-  // if the key was not found in the btree: return the key which was found
-  // in the transaction tree
   if (st == UPS_KEY_NOT_FOUND) {
-    if (cursor)
-      cursor->activate_txn(op);
-    copy_key(db, context->txn, &copy, key);
-    if (likely(record != 0))
-      copy_record(db, context->txn, op, record);
+    use_txn_result(key, record);
     return 0;
   }
 
@@ -581,7 +583,7 @@ FindTxn::check_for_a_better_match_in_btree(ups_key_t *key, ups_record_t *record,
   // if there's an approx match in the btree: compare both keys and
   // use the one that is closer. if the btree is closer: make sure
   // that it was not erased or overwritten in a transaction
-  int cmp = db->btree_index->compare_keys(key, &copy);
+  int cmp = db->btree_index->compare_keys(key, op->node->key());
   bool use_btree = false;
   if (ISSET(flags, UPS_FIND_GT_MATCH)) {
     if (cmp < 0)
@@ -601,11 +603,7 @@ FindTxn::check_for_a_better_match_in_btree(ups_key_t *key, ups_record_t *record,
     return 0;
   }
   else { // use the txn key
-    if (cursor)
-      cursor->activate_txn(op);
-    copy_key(db, context->txn, &copy, key);
-    if (likely(record != 0))
-      copy_record(db, context->txn, op, record);
+    use_txn_result(key, record);
     return 0;
   }
 }
