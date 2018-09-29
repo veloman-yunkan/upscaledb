@@ -36,9 +36,9 @@ int main(int argc, char* argv[])
     ups_db_t* db;
     ups_env_create_db(env, &db, 1, 0, &params[0]);
 
-    const int item_count = 50;
+    const int initial_item_count = 50;
 
-    for (int i = 0; i < item_count; i++)
+    for (int i = 0; i < initial_item_count; i++)
     {
         ups_key_t key = ups_make_key(&i, sizeof(i));
         ups_record_t record = {0};
@@ -46,7 +46,8 @@ int main(int argc, char* argv[])
         ups_db_insert(db, 0, &key, &record, 0);
     }
 
-    for(int i = 0; i < item_count / 2; i++)
+    const int k = initial_item_count / 2;
+    for(int i = 0; i < k; i++)
     {
         ups_key_t key = ups_make_key(&i, sizeof(i));
 
@@ -57,12 +58,12 @@ int main(int argc, char* argv[])
     ups_db_count(db,0, 0, &count);
 
     size_t error_count = 0;
-    if(count != item_count / 2){
+    if(count != initial_item_count - k){
         std::cerr << "Item count after delete: " << count << std::endl;
         ++error_count;
     }
 
-    for(int i = 0; i < item_count / 2; i++)
+    for(int i = 0; i < k; i++)
     {
         ups_key_t key = ups_make_key(&i, sizeof(i));
         ups_record_t record = {0};
@@ -72,7 +73,7 @@ int main(int argc, char* argv[])
         ups_status_t st = ups_cursor_find(cursor, &key, &record, UPS_FIND_GEQ_MATCH);
         //ups_status_t st = ups_db_find(db, 0, &key, &record, UPS_FIND_GEQ_MATCH);
 
-        if(st == UPS_SUCCESS && *reinterpret_cast<int*>(key.data) == i){
+        if(st == UPS_SUCCESS && *reinterpret_cast<int*>(key.data) != k){
             std::cerr << "Found deleted item: " << i << std::endl;
             ++error_count;
         }
