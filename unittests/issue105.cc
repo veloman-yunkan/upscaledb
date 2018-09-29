@@ -73,9 +73,13 @@ int main(int argc, char* argv[])
         ups_status_t st = ups_cursor_find(cursor, &key, &record, UPS_FIND_GEQ_MATCH);
         //ups_status_t st = ups_db_find(db, 0, &key, &record, UPS_FIND_GEQ_MATCH);
 
-        if(st == UPS_SUCCESS && *reinterpret_cast<int*>(key.data) != k){
-            std::cerr << "Found deleted item: " << i << std::endl;
+        if(st == UPS_SUCCESS ) {
+          const int found_key_data = *reinterpret_cast<int*>(key.data);
+          if ( found_key_data != k ) {
+            std::cerr << "When searching with " << i
+                      << " found wrong item: " << found_key_data << std::endl;
             ++error_count;
+          }
         }
 
         ups_cursor_close(cursor);
