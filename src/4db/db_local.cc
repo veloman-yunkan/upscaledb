@@ -354,8 +354,8 @@ public: // functions
 private: // functions
   Status check_txns(ups_key_t *key, ups_record_t *record, uint32_t flags);
   Status check_txn_node(ups_key_t *key, TxnNode* node, ups_record_t *record, uint32_t flags);
-  Status handle_key_inserted_in_a_transaction(ups_key_t *key, ups_record_t *record);
-  Status handle_key_erased_in_a_transaction(ups_key_t *key, uint32_t flags);
+  Status handle_key_inserted_in_a_txn(ups_key_t *key, ups_record_t *record);
+  Status handle_key_erased_in_a_txn(ups_key_t *key, uint32_t flags);
   ups_status_t check_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   ups_status_t find_non_erased_key_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   bool txn_result_is_better(ups_key_t* key, uint32_t flags);
@@ -450,11 +450,11 @@ FindTxn::check_txn_node(ups_key_t *key, TxnNode* node, ups_record_t *record, uin
         continue; // XXX: why are flushed operations simply ignored???
 
       if (is_an_insertion(op)) {
-        return handle_key_inserted_in_a_transaction(key, record);
+        return handle_key_inserted_in_a_txn(key, record);
       }
 
       if (ISSET(op->flags, TxnOperation::kErase)) {
-        return handle_key_erased_in_a_transaction(key, flags);
+        return handle_key_erased_in_a_txn(key, flags);
       }
 
       if (unlikely(NOTSET(op->flags, TxnOperation::kNop))) {
@@ -471,7 +471,7 @@ FindTxn::check_txn_node(ups_key_t *key, TxnNode* node, ups_record_t *record, uin
 }
 
 FindTxn::Status
-FindTxn::handle_key_inserted_in_a_transaction(ups_key_t *key, ups_record_t *record)
+FindTxn::handle_key_inserted_in_a_txn(ups_key_t *key, ups_record_t *record)
 {
   if (cursor)
     cursor->activate_txn(op);
@@ -486,7 +486,7 @@ FindTxn::handle_key_inserted_in_a_transaction(ups_key_t *key, ups_record_t *reco
 }
 
 FindTxn::Status
-FindTxn::handle_key_erased_in_a_transaction(ups_key_t *key, uint32_t flags)
+FindTxn::handle_key_erased_in_a_txn(ups_key_t *key, uint32_t flags)
 {
   if (key_is_configured_for_exact_match_lookup(key))
     key_is_erased = true;
