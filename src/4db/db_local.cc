@@ -360,6 +360,7 @@ private: // functions
   ups_status_t check_for_a_better_match_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   ups_status_t find_non_erased_key_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   ups_status_t find_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
+  bool txn_result_is_better(ups_key_t* key, uint32_t flags);
   void use_txn_result(ups_key_t *key, ups_record_t *record);
 };
 
@@ -571,40 +572,34 @@ FindTxn::check_for_a_better_match_in_btree(ups_key_t *key, ups_record_t *record,
   if (unlikely(st))
     return st;
 
-  // the btree key is a direct match? then return it
+  if (txn_result_is_better(key, flags))
+    use_txn_result(key, record);
+  else if (cursor)
+    cursor->activate_btree();
+
+  return 0;
+}
+
+bool
+FindTxn::txn_result_is_better(ups_key_t* key, uint32_t flags)
+{
   if (key_is_configured_for_exact_match_lookup(key)
         && ISSET(flags, UPS_FIND_EQ_MATCH)
         && !exact_is_erased) {
-    if (cursor)
-      cursor->activate_btree();
-    return 0;
+    // the btree key is a direct match
+    return false;
   }
 
   // if there's an approx match in the btree: compare both keys and
   // use the one that is closer. if the btree is closer: make sure
   // that it was not erased or overwritten in a transaction
   int cmp = db->btree_index->compare_keys(key, op->node->key());
-  bool use_btree = false;
   if (ISSET(flags, UPS_FIND_GT_MATCH)) {
-    if (cmp < 0)
-      use_btree = true;
+    return cmp > 0;
   }
-  else if (ISSET(flags, UPS_FIND_LT_MATCH)) {
-    if (cmp > 0)
-      use_btree = true;
-  }
-  else
-    assert(!"shouldn't be here");
-
-  // use the btree key
-  if (likely(use_btree)) {
-    if (cursor)
-      cursor->activate_btree();
-    return 0;
-  }
-  else { // use the txn key
-    use_txn_result(key, record);
-    return 0;
+  else {
+    assert(ISSET(flags, UPS_FIND_LT_MATCH));
+    return cmp < 0;
   }
 }
 
