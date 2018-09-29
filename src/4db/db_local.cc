@@ -359,7 +359,6 @@ private: // functions
   ups_status_t check_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   ups_status_t check_for_a_better_match_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   ups_status_t find_non_erased_key_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
-  ups_status_t find_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   bool txn_result_is_better(ups_key_t* key, uint32_t flags);
   void use_approx_result_from_txn(ups_key_t *key, ups_record_t *record);
 };
@@ -391,7 +390,12 @@ FindTxn::check_btree(ups_key_t *key, ups_record_t *record, uint32_t flags)
     return check_for_a_better_match_in_btree(key, record, flags);
   }
 
-  return find_in_btree(key, record, flags);
+  ups_status_t st = find_non_erased_key_in_btree(key, record, flags);
+  if (unlikely(st))
+    return st;
+  if (cursor)
+    cursor->activate_btree();
+  return 0;
 }
 
 FindTxn::Status
@@ -594,18 +598,6 @@ FindTxn::txn_result_is_better(ups_key_t* key, uint32_t flags)
     return cmp < 0;
   }
 }
-
-ups_status_t
-FindTxn::find_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags)
-{
-  ups_status_t st = find_non_erased_key_in_btree(key, record, flags);
-  if (unlikely(st))
-    return st;
-  if (cursor)
-    cursor->activate_btree();
-  return 0;
-}
-
 
 static inline ups_status_t
 find_txn(LocalDb *db, Context *context, LocalCursor *cursor, ups_key_t *key,
