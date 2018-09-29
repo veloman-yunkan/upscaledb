@@ -381,10 +381,21 @@ struct TxnFixture : BaseFixture {
     REQUIRE(UPS_KEY_NOT_FOUND == ups_db_erase(db, txn2, &key, 0));
     REQUIRE(0 == ups_txn_commit(txn2, 0));
   }
+};
 
-  void issue105Test() {
-    const int item_count = 50;
-    for (int i = 0; i < item_count; i++) {
+struct Issue105Fixture : TxnFixture {
+  explicit Issue105Fixture(int flush_threshold)
+  {
+    ups_set_committed_flush_threshold(flush_threshold);
+  }
+
+  ~Issue105Fixture()
+  {
+    ups_set_committed_flush_threshold(10); // XXX: restore the actual default
+  }
+
+  void issue105Test(int initial_item_count) {
+    for (int i = 0; i < initial_item_count; i++) {
       ups_key_t key = ups_make_key(&i, sizeof(i));
       ups_record_t rec = {0};
       REQUIRE(0 == ups_db_insert(db, 0, &key, &rec, 0));
@@ -392,32 +403,31 @@ struct TxnFixture : BaseFixture {
 
     uint64_t count = 0;
     REQUIRE(0 == ups_db_count(db, 0, 0, &count));
-    REQUIRE(count == item_count);
+    REQUIRE(count == initial_item_count);
 
-    for (int i = 0; i < item_count / 2; i++) {
+    const int k = initial_item_count / 2;
+    for (int i = 0; i < k; i++) {
       ups_key_t key = ups_make_key(&i, sizeof(i));
       REQUIRE(0 == ups_db_erase(db, 0, &key, 0));
 
       REQUIRE(0 == ups_db_count(db, 0, 0, &count));
-      REQUIRE(count == item_count - i - 1);
+      REQUIRE(count == initial_item_count - i - 1);
     }
 
     REQUIRE(0 == ups_db_count(db, 0, 0, &count));
-    REQUIRE(count == item_count / 2);
+    REQUIRE(count == k);
 
-#if 0
-    //for (int i = 0; i < item_count / 2; i++) {
-    for (int i = 23; i < item_count / 2; i++) {
-        std::cout << "searching for " << i << std::endl;
+    for (int i = 0; i < k; i++) {
       ups_key_t key = ups_make_key(&i, sizeof(i));
       ups_record_t record = {0};
 
-      ups_status_t st = ups_db_find(db, 0, &key, &record, UPS_FIND_GEQ_MATCH);
-      if (st == UPS_SUCCESS) {// && *reinterpret_cast<int*>(key.data) == i) {
-        std::cout << "Found deleted item: " << i << std::endl;
-      }
+      ups_cursor_t* cursor;
+      REQUIRE(0 == ups_cursor_create(&cursor, db, 0, 0));
+      REQUIRE(0 == ups_cursor_find(cursor, &key, &record, UPS_FIND_GEQ_MATCH));
+      REQUIRE(k == *reinterpret_cast<int*>(key.data));
+
+      REQUIRE(0 == ups_cursor_close(cursor));
     }
-#endif
   }
 };
 
@@ -1206,8 +1216,11 @@ TEST_CASE("Txn/inmem/cursorOverwriteTest", "")
 
 TEST_CASE("Txn/issue105Test", "")
 {
-  TxnFixture f;
-  f.issue105Test();
+  for ( int i = 1; i < 20; ++i )
+  {
+    Issue105Fixture f(i);
+    f.issue105Test(10);
+  }
 }
 
 } // namespace upscaledb
