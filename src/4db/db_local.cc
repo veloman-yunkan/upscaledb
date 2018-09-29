@@ -320,24 +320,6 @@ namespace
 
 class FindTxn
 {
-private: //data
-  LocalDb *const db;
-  Context *const context;
-  LocalCursor *const cursor;
-  ByteArray *const key_arena;
-  ByteArray *const record_arena;
-  TxnOperation *op = 0;
-
-private: // types
-  enum Status {
-    SUCCESS,
-    KEY_NOT_FOUND,
-    TXN_CONFLICT,
-    CHECK_BTREE,
-    TRY_PREVIOUS_NODE,
-    TRY_NEXT_NODE
-  };
-
 public: // functions
   FindTxn(LocalDb *db_arg, Context *context_arg, LocalCursor *cursor_arg)
       : db(db_arg)
@@ -350,6 +332,16 @@ public: // functions
 
   ups_status_t find(ups_key_t *key, ups_record_t *record, uint32_t flags);
 
+private: // types
+  enum Status {
+    SUCCESS,
+    KEY_NOT_FOUND,
+    TXN_CONFLICT,
+    CHECK_BTREE,
+    TRY_PREVIOUS_NODE,
+    TRY_NEXT_NODE
+  };
+
 private: // functions
   Status check_txns(ups_key_t *key, ups_record_t *record, uint32_t flags);
   Status check_txn_node(ups_key_t *key, TxnNode* node, ups_record_t *record, uint32_t flags);
@@ -359,6 +351,15 @@ private: // functions
   ups_status_t find_non_erased_key_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   bool txn_result_is_better(ups_key_t* key, uint32_t flags);
   void use_approx_result_from_txn(ups_key_t *key, ups_record_t *record);
+
+private: //data
+  LocalDb *const db;
+  Context *const context;
+  LocalCursor *const cursor;
+  ByteArray *const key_arena;
+  ByteArray *const record_arena;
+  TxnOperation *op = 0;
+
 };
 
 // Lookup of a key/record pair in the Txn index and in the btree,
@@ -524,11 +525,14 @@ FindTxn::find_non_erased_key_in_btree(ups_key_t *key, ups_record_t *record, uint
 
   ups_key_set_intflags(key, 0);
 
-  do {
+  do
+  {
     st = db->btree_index->find(context, cursor, key, key_arena, record,
                     record_arena, flags);
     flags &= (~UPS_FIND_EQ_MATCH); // Exact match must be attempted only once
-  } while ( st == 0 && is_key_erased(context, db->txn_index.get(), key) );
+  }
+  while ( st == 0 && is_key_erased(context, db->txn_index.get(), key) );
+
   return st;
 }
 
