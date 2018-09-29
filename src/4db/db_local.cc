@@ -361,7 +361,7 @@ private: // functions
   ups_status_t find_non_erased_key_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   ups_status_t find_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   bool txn_result_is_better(ups_key_t* key, uint32_t flags);
-  void use_txn_result(ups_key_t *key, ups_record_t *record);
+  void use_approx_result_from_txn(ups_key_t *key, ups_record_t *record);
 };
 
 // Lookup of a key/record pair in the Txn index and in the btree,
@@ -547,7 +547,7 @@ FindTxn::find_non_erased_key_in_btree(ups_key_t *key, ups_record_t *record, uint
 }
 
 void
-FindTxn::use_txn_result(ups_key_t *key, ups_record_t *record)
+FindTxn::use_approx_result_from_txn(ups_key_t *key, ups_record_t *record)
 {
   if (cursor)
     cursor->activate_txn(op);
@@ -565,7 +565,7 @@ FindTxn::check_for_a_better_match_in_btree(ups_key_t *key, ups_record_t *record,
   ups_status_t st = find_non_erased_key_in_btree(key, record, flags);
 
   if (st == UPS_KEY_NOT_FOUND) {
-    use_txn_result(key, record);
+    use_approx_result_from_txn(key, record);
     return 0;
   }
 
@@ -573,7 +573,7 @@ FindTxn::check_for_a_better_match_in_btree(ups_key_t *key, ups_record_t *record,
     return st;
 
   if (txn_result_is_better(key, flags))
-    use_txn_result(key, record);
+    use_approx_result_from_txn(key, record);
   else if (cursor)
     cursor->activate_btree();
 
