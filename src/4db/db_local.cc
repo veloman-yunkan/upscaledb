@@ -339,10 +339,12 @@ private: // types
 
 public: // functions
   FindTxn(LocalDb *db_arg, Context *context_arg, LocalCursor *cursor_arg)
-      : db(db_arg), context(context_arg), cursor(cursor_arg)
+      : db(db_arg)
+      , context(context_arg)
+      , cursor(cursor_arg)
+      , key_arena(&db->key_arena(context->txn))
+      , record_arena(&db->record_arena(context->txn))
   {
-    key_arena = &db->key_arena(context->txn);
-    record_arena = &db->record_arena(context->txn);
   }
 
   ups_status_t find(ups_key_t *key, ups_record_t *record, uint32_t flags);
@@ -352,7 +354,7 @@ private: // functions
     return op && key_is_configured_for_approximate_lookup(key);
   }
 
-  Status search_in_txn_ops(ups_key_t *key, ups_record_t *record, uint32_t flags);
+  Status check_txns(ups_key_t *key, ups_record_t *record, uint32_t flags);
   Status check_txn_node_ops(ups_key_t *key, TxnNode* node, ups_record_t *record, uint32_t flags);
   Status handle_key_inserted_in_a_transaction(ups_key_t *key, ups_record_t *record);
   Status handle_key_erased_in_a_transaction(ups_key_t *key, uint32_t flags);
@@ -375,7 +377,7 @@ FindTxn::find(ups_key_t *key, ups_record_t *record, uint32_t flags)
   if (cursor)
     cursor->set_to_nil();
 
-  switch ( search_in_txn_ops(key, record, flags) ) {
+  switch ( check_txns(key, record, flags) ) {
     case SUCCESS:       return UPS_SUCCESS;
     case KEY_NOT_FOUND: return UPS_KEY_NOT_FOUND;
     case TXN_CONFLICT:  return UPS_TXN_CONFLICT;
@@ -399,7 +401,7 @@ FindTxn::check_btree(ups_key_t *key, ups_record_t *record, uint32_t flags)
 }
 
 FindTxn::Status
-FindTxn::search_in_txn_ops(ups_key_t *key, ups_record_t *record, uint32_t flags)
+FindTxn::check_txns(ups_key_t *key, ups_record_t *record, uint32_t flags)
 {
   // get the node for this key (but don't create a new one if it does
   // not yet exist)
@@ -519,9 +521,6 @@ FindTxn::find_non_erased_key_in_btree(ups_key_t *key, ups_record_t *record, uint
   ups_status_t st = 0;
 
   ups_key_set_intflags(key, 0);
-
-  ByteArray *key_arena = &db->key_arena(context->txn);
-  ByteArray *record_arena = &db->record_arena(context->txn);
 
   bool first_run = true;
   do {
