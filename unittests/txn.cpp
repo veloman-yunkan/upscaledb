@@ -381,6 +381,131 @@ struct TxnFixture : BaseFixture {
     REQUIRE(UPS_KEY_NOT_FOUND == ups_db_erase(db, txn2, &key, 0));
     REQUIRE(0 == ups_txn_commit(txn2, 0));
   }
+
+  void txnFindNearErasedTest() {
+    ups_txn_t *txn;
+    int i1 = 1, i2 = 2, i3 = 3;
+    ups_key_t key1 = ups_make_key(&i1, sizeof(i1));
+    ups_record_t rec1 = ups_make_record((void *)"one", 3);
+    ups_key_t key2 = ups_make_key(&i2, sizeof(i2));
+    ups_record_t rec2 = ups_make_record((void *)"two", 3);
+    ups_key_t key3 = ups_make_key(&i3, sizeof(i3));
+    ups_record_t rec3 = ups_make_record((void *)"three", 4);
+    ups_key_t k;
+    ups_cursor_t* c;
+
+    REQUIRE(0 == ups_txn_begin(&txn, env, 0, 0, 0));
+
+    REQUIRE(0 == ups_db_insert(db, txn, &key3, &rec3, 0));
+
+    // find outside transaction
+    k = key1;
+    REQUIRE(0 == ups_cursor_create(&c, db, 0, 0));
+    REQUIRE(UPS_TXN_CONFLICT == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
+    REQUIRE(0 == ups_cursor_close(c));
+
+    // find inside transaction
+    k = key1;
+    REQUIRE(0 == ups_cursor_create(&c, db, txn, 0));
+    REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
+    REQUIRE(i3 == *(int*)k.data);
+    REQUIRE(0 == ups_cursor_close(c));
+
+    REQUIRE(0 == ups_txn_commit(txn, 0));
+
+    // find outside transaction after it is committed but not yet flushed
+    k = key1;
+    REQUIRE(0 == ups_cursor_create(&c, db, 0, 0));
+    REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
+    REQUIRE(i3 == *(int*)k.data);
+    REQUIRE(0 == ups_cursor_close(c));
+
+    ups_env_flush(env, UPS_FLUSH_COMMITTED_TRANSACTIONS);
+
+    // find outside transaction after it is flushed
+    k = key1;
+    REQUIRE(0 == ups_cursor_create(&c, db, 0, 0));
+    REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
+    REQUIRE(i3 == *(int*)k.data);
+    REQUIRE(0 == ups_cursor_close(c));
+
+    REQUIRE(0 == ups_txn_begin(&txn, env, 0, 0, 0));
+
+    REQUIRE(0 == ups_db_insert(db, txn, &key1, &rec1, 0));
+
+    // find outside transaction
+    k = key1;
+    REQUIRE(0 == ups_cursor_create(&c, db, 0, 0));
+    REQUIRE(UPS_TXN_CONFLICT == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
+    REQUIRE(0 == ups_cursor_close(c));
+
+    // find inside transaction
+    k = key1;
+    REQUIRE(0 == ups_cursor_create(&c, db, txn, 0));
+    REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
+    REQUIRE(i1 == *(int*)k.data);
+    REQUIRE(0 == ups_cursor_close(c));
+
+    REQUIRE(0 == ups_txn_commit(txn, 0));
+
+    // find outside transaction after it is committed but not yet flushed
+    k = key1;
+    REQUIRE(0 == ups_cursor_create(&c, db, 0, 0));
+    REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
+    REQUIRE(i1 == *(int*)k.data);
+    REQUIRE(0 == ups_cursor_close(c));
+
+    ups_env_flush(env, UPS_FLUSH_COMMITTED_TRANSACTIONS);
+
+    // find outside transaction after it is flushed
+    k = key1;
+    REQUIRE(0 == ups_cursor_create(&c, db, 0, 0));
+    REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
+    REQUIRE(i1 == *(int*)k.data);
+    REQUIRE(0 == ups_cursor_close(c));
+
+    REQUIRE(0 == ups_txn_begin(&txn, env, 0, 0, 0));
+
+    REQUIRE(0 == ups_db_erase(db, txn, &key1, 0));
+    REQUIRE(0 == ups_db_insert(db, txn, &key2, &rec2, 0));
+
+    // find outside transaction
+    k = key1;
+    REQUIRE(0 == ups_cursor_create(&c, db, 0, 0));
+    REQUIRE(UPS_TXN_CONFLICT == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
+    REQUIRE(0 == ups_cursor_close(c));
+
+    // find inside transaction
+    REQUIRE(0 == ups_cursor_create(&c, db, txn, 0));
+    k = key1;
+    REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_GEQ_MATCH));
+    REQUIRE(i2 == *(int*)k.data);
+    k = key1;
+    REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
+    REQUIRE(i2 == *(int*)k.data);
+    REQUIRE(0 == ups_cursor_close(c));
+
+    REQUIRE(0 == ups_txn_commit(txn, 0));
+
+    // find outside transaction after it is committed but not yet flushed
+    REQUIRE(0 == ups_cursor_create(&c, db, 0, 0));
+    k = key1;
+    REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_GEQ_MATCH));
+    REQUIRE(i2 == *(int*)k.data);
+    k = key1;
+    REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
+    REQUIRE(i2 == *(int*)k.data);
+    REQUIRE(0 == ups_cursor_close(c));
+
+    ups_env_flush(env, UPS_FLUSH_COMMITTED_TRANSACTIONS);
+
+    // find outside transaction after it is flushed
+    k = key1;
+    REQUIRE(0 == ups_cursor_create(&c, db, 0, 0));
+    REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
+    REQUIRE(i2 == *(int*)k.data);
+    REQUIRE(0 == ups_cursor_close(c));
+  }
 };
 
 struct Issue105Fixture : TxnFixture {
@@ -557,6 +682,11 @@ TEST_CASE("Txn/txnInsertFindErase4Test", "")
   f.txnInsertFindErase4Test();
 }
 
+TEST_CASE("Txn/txnFindNearErasedTest", "")
+{
+  TxnFixture f;
+  f.txnFindNearErasedTest();
+}
 
 struct HighLevelTxnFixture : BaseFixture {
 
