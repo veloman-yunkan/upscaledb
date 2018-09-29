@@ -524,23 +524,11 @@ FindTxn::find_non_erased_key_in_btree(ups_key_t *key, ups_record_t *record, uint
 
   ups_key_set_intflags(key, 0);
 
-  bool first_run = true;
-  bool key_is_erased = false;
   do {
-    uint32_t new_flags = flags;
-
-    // the "exact match" key was erased? then don't fetch it again
-    if (!first_run || key_is_erased) {
-      first_run = false;
-      new_flags = flags & (~UPS_FIND_EQ_MATCH);
-    }
-
     st = db->btree_index->find(context, cursor, key, key_arena, record,
-                    record_arena, new_flags);
-    if (st)
-      break;
-    key_is_erased = is_key_erased(context, db->txn_index.get(), key);
-  } while (key_is_erased);
+                    record_arena, flags);
+    flags &= (~UPS_FIND_EQ_MATCH); // Exact match must be attempted only once
+  } while ( st == 0 && is_key_erased(context, db->txn_index.get(), key) );
   return st;
 }
 
