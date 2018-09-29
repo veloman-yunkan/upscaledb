@@ -352,16 +352,11 @@ public: // functions
   ups_status_t find(ups_key_t *key, ups_record_t *record, uint32_t flags);
 
 private: // functions
-  bool there_was_an_approximate_match(ups_key_t *key) const {
-    return op && key_is_configured_for_approximate_lookup(key);
-  }
-
   Status check_txns(ups_key_t *key, ups_record_t *record, uint32_t flags);
-  Status check_txn_node_ops(ups_key_t *key, TxnNode* node, ups_record_t *record, uint32_t flags);
+  Status check_txn_node(ups_key_t *key, TxnNode* node, ups_record_t *record, uint32_t flags);
   Status handle_key_inserted_in_a_transaction(ups_key_t *key, ups_record_t *record);
   Status handle_key_erased_in_a_transaction(ups_key_t *key, uint32_t flags);
   ups_status_t check_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
-  ups_status_t check_for_a_better_match_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   ups_status_t find_non_erased_key_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags);
   bool txn_result_is_better(ups_key_t* key, uint32_t flags);
   void use_approx_result_from_txn(ups_key_t *key, ups_record_t *record);
@@ -390,16 +385,24 @@ FindTxn::find(ups_key_t *key, ups_record_t *record, uint32_t flags)
 ups_status_t
 FindTxn::check_btree(ups_key_t *key, ups_record_t *record, uint32_t flags)
 {
-  if (unlikely(there_was_an_approximate_match(key))) {
-    return check_for_a_better_match_in_btree(key, record, flags);
+  const bool txns_had_an_approx_match = op != nullptr;
+
+  const ups_status_t st = find_non_erased_key_in_btree(key, record, flags);
+
+  if (unlikely(txns_had_an_approx_match)) {
+    if (st == UPS_KEY_NOT_FOUND
+        || st == 0 && txn_result_is_better(key, flags) ) {
+      use_approx_result_from_txn(key, record);
+      return 0;
+    }
   }
 
-  ups_status_t st = find_non_erased_key_in_btree(key, record, flags);
-  if (unlikely(st))
-    return st;
-  if (cursor)
-    cursor->activate_btree();
-  return 0;
+  if ( likely(st == 0) ) {
+    if ( cursor )
+      cursor->activate_btree();
+  }
+
+  return st;
 }
 
 FindTxn::Status
@@ -410,7 +413,7 @@ FindTxn::check_txns(ups_key_t *key, ups_record_t *record, uint32_t flags)
   TxnNode *node = db->txn_index->get(key, flags);
 
   while ( node ) {
-    const Status st = check_txn_node_ops(key, node, record, flags);
+    const Status st = check_txn_node(key, node, record, flags);
     switch ( st )
     {
       case TRY_PREVIOUS_NODE: node = node->previous_sibling(); break;
@@ -423,7 +426,7 @@ FindTxn::check_txns(ups_key_t *key, ups_record_t *record, uint32_t flags)
 }
 
 FindTxn::Status
-FindTxn::check_txn_node_ops(ups_key_t *key, TxnNode* node, ups_record_t *record, uint32_t flags)
+FindTxn::check_txn_node(ups_key_t *key, TxnNode* node, ups_record_t *record, uint32_t flags)
 {
   //
   // pick the node of this key, and walk through each operation
@@ -554,27 +557,6 @@ FindTxn::use_approx_result_from_txn(ups_key_t *key, ups_record_t *record)
 
   if (likely(record != 0))
     copy_record(db, context->txn, op, record);
-}
-
-ups_status_t
-FindTxn::check_for_a_better_match_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags)
-{
-  ups_status_t st = find_non_erased_key_in_btree(key, record, flags);
-
-  if (st == UPS_KEY_NOT_FOUND) {
-    use_approx_result_from_txn(key, record);
-    return 0;
-  }
-
-  if (unlikely(st))
-    return st;
-
-  if (txn_result_is_better(key, flags))
-    use_approx_result_from_txn(key, record);
-  else if (cursor)
-    cursor->activate_btree();
-
-  return 0;
 }
 
 bool
