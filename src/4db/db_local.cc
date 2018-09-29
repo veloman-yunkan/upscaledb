@@ -327,7 +327,6 @@ private: //data
   ByteArray *const key_arena;
   ByteArray *const record_arena;
   TxnOperation *op = 0;
-  bool key_is_erased = false;
 
 private: // types
   enum Status {
@@ -488,8 +487,6 @@ FindTxn::handle_key_inserted_in_a_txn(ups_key_t *key, ups_record_t *record)
 FindTxn::Status
 FindTxn::handle_key_erased_in_a_txn(ups_key_t *key, uint32_t flags)
 {
-  if (key_is_configured_for_exact_match_lookup(key))
-    key_is_erased = true;
   // if an approximate match is requested then move to the next
   // or previous node
   if (ISSET(flags, UPS_FIND_LT_MATCH)) {
@@ -528,6 +525,7 @@ FindTxn::find_non_erased_key_in_btree(ups_key_t *key, ups_record_t *record, uint
   ups_key_set_intflags(key, 0);
 
   bool first_run = true;
+  bool key_is_erased = false;
   do {
     uint32_t new_flags = flags;
 
@@ -563,8 +561,7 @@ bool
 FindTxn::txn_result_is_better(ups_key_t* key, uint32_t flags)
 {
   if (key_is_configured_for_exact_match_lookup(key)
-        && ISSET(flags, UPS_FIND_EQ_MATCH)
-        && !key_is_erased) {
+        && ISSET(flags, UPS_FIND_EQ_MATCH)) {
     // the btree key is a direct match
     return false;
   }
