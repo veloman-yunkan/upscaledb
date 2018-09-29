@@ -315,17 +315,19 @@ configure_key_for_exact_match_lookup(ups_key_t *key) {
         (ups_key_get_intflags(key) & (~BtreeKey::kApproximate)));
 }
 
+namespace
+{
 
 class FindTxn
 {
 private: //data
-  LocalDb *db;
-  Context *context;
-  LocalCursor *cursor;
+  LocalDb *const db;
+  Context *const context;
+  LocalCursor *const cursor;
+  ByteArray *const key_arena;
+  ByteArray *const record_arena;
   TxnOperation *op = 0;
-  bool exact_is_erased = false;
-  ByteArray *key_arena;
-  ByteArray *record_arena;
+  bool key_is_erased = false;
 
 private: // types
   enum Status {
@@ -484,7 +486,7 @@ FindTxn::Status
 FindTxn::handle_key_erased_in_a_transaction(ups_key_t *key, uint32_t flags)
 {
   if (key_is_configured_for_exact_match_lookup(key))
-    exact_is_erased = true;
+    key_is_erased = true;
   // if an approximate match is requested then move to the next
   // or previous node
   if (ISSET(flags, UPS_FIND_LT_MATCH)) {
@@ -527,7 +529,7 @@ FindTxn::find_non_erased_key_in_btree(ups_key_t *key, ups_record_t *record, uint
     uint32_t new_flags = flags;
 
     // the "exact match" key was erased? then don't fetch it again
-    if (!first_run || exact_is_erased) {
+    if (!first_run || key_is_erased) {
       first_run = false;
       new_flags = flags & (~UPS_FIND_EQ_MATCH);
     }
@@ -536,8 +538,8 @@ FindTxn::find_non_erased_key_in_btree(ups_key_t *key, ups_record_t *record, uint
                     record_arena, new_flags);
     if (st)
       break;
-    exact_is_erased = is_key_erased(context, db->txn_index.get(), key);
-  } while (exact_is_erased);
+    key_is_erased = is_key_erased(context, db->txn_index.get(), key);
+  } while (key_is_erased);
   return st;
 }
 
@@ -580,7 +582,7 @@ FindTxn::txn_result_is_better(ups_key_t* key, uint32_t flags)
 {
   if (key_is_configured_for_exact_match_lookup(key)
         && ISSET(flags, UPS_FIND_EQ_MATCH)
-        && !exact_is_erased) {
+        && !key_is_erased) {
     // the btree key is a direct match
     return false;
   }
@@ -597,6 +599,8 @@ FindTxn::txn_result_is_better(ups_key_t* key, uint32_t flags)
     return cmp < 0;
   }
 }
+
+} // unnamed namespace
 
 static inline ups_status_t
 find_txn(LocalDb *db, Context *context, LocalCursor *cursor, ups_key_t *key,
