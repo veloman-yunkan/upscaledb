@@ -387,19 +387,10 @@ FindTxn::find(ups_key_t *key, ups_record_t *record, uint32_t flags)
 ups_status_t
 FindTxn::check_btree(ups_key_t *key, ups_record_t *record, uint32_t flags)
 {
-  // if there was an approximate match: check if the btree provides
-  // a better match
   if (unlikely(there_was_an_approximate_match(key))) {
     return check_for_a_better_match_in_btree(key, record, flags);
   }
 
-  //
-  // no approximate match:
-  //
-  // we've successfully checked all un-flushed transactions and there
-  // were no conflicts, and we have not found the key: now try to
-  // lookup the key in the btree.
-  //
   return find_in_btree(key, record, flags);
 }
 
@@ -418,6 +409,7 @@ FindTxn::search_in_txn_ops(ups_key_t *key, ups_record_t *record, uint32_t flags)
       case TRY_NEXT_NODE:     node = node->next_sibling();     break;
       default:                return st;
     }
+    op = nullptr;
   }
   return CHECK_BTREE;
 }
@@ -606,9 +598,7 @@ FindTxn::txn_result_is_better(ups_key_t* key, uint32_t flags)
 ups_status_t
 FindTxn::find_in_btree(ups_key_t *key, ups_record_t *record, uint32_t flags)
 {
-  ups_status_t st = db->btree_index->find(context, cursor,
-                                          key, key_arena,
-                                          record, record_arena, flags);
+  ups_status_t st = find_non_erased_key_in_btree(key, record, flags);
   if (unlikely(st))
     return st;
   if (cursor)
