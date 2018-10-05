@@ -566,6 +566,48 @@ struct Issue105Fixture : TxnFixture {
   }
 };
 
+struct Issue106Fixture : TxnFixture {
+  explicit Issue106Fixture(int flush_threshold)
+  {
+    ups_set_committed_flush_threshold(flush_threshold);
+  }
+
+  ~Issue106Fixture()
+  {
+    ups_set_committed_flush_threshold(10); // XXX: restore the actual default
+  }
+
+  void issue106Test(int item_count) {
+    ups_record_t rec = {0};
+    for (int i = 0; i < item_count; i++)
+    {
+      ups_key_t key = ups_make_key(&i, sizeof(i));
+
+      REQUIRE(0 == ups_db_insert(db, 0, &key, &rec, 0));
+    }
+
+    ups_cursor_t* cur;
+
+    REQUIRE( 0 == ups_cursor_create(&cur, db, 0, 0) );
+
+    int key_data = 0;
+    ups_key_t key = ups_make_key(&key_data, sizeof(key_data));
+
+    REQUIRE( 0 == ups_cursor_find(cur, &key, &rec, UPS_FIND_GEQ_MATCH) );
+
+    int counter = 0;
+    do
+    {
+      REQUIRE( 0 == ups_cursor_move(cur, &key, &rec, 0) );
+      REQUIRE( counter == *reinterpret_cast<int*>(key.data) );
+      counter++;
+    }
+    while(UPS_SUCCESS == ups_cursor_move(cur, &key, &rec, UPS_CURSOR_NEXT));
+
+    REQUIRE( 0 == ups_cursor_close(cur) );
+  }
+};
+
 TEST_CASE("Txn/beginCommitTest", "")
 {
   TxnFixture f;
@@ -1360,6 +1402,15 @@ TEST_CASE("Txn/issue105Test", "")
   {
     Issue105Fixture f(i);
     f.issue105Test(10);
+  }
+}
+
+TEST_CASE("Txn/issue106Test", "")
+{
+  for ( int i = 1; i < 10; ++i )
+  {
+    Issue106Fixture f(i);
+    f.issue106Test(10);
   }
 }
 
