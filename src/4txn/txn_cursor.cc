@@ -96,7 +96,7 @@ move_top_in_node(TxnCursor *cursor, TxnNode *node, bool ignore_conflicts,
       // a normal erase will return an error (but we still couple the
       // cursor because the caller might need to know WHICH key was
       // deleted!)
-      if (ISSET(op->flags, TxnOperation::kErase)) {
+      if (op->effect == TxnOperation::ERASES_EXISTING_KEY) {
         cursor->couple_to(op);
         if (op->referenced_duplicate > 0)
           return 0;

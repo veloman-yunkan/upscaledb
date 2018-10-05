@@ -136,6 +136,10 @@ TxnOperation::initialize(LocalTxn *txn_, TxnNode *node_,
   lsn = lsn_;
   flags = flags_;
   original_flags = original_flags_;
+  if ( flags == kErase )
+    effect = ERASES_EXISTING_KEY;
+  else
+    effect = UNKNOWN_EFFECT;
 
   // copy the key data
   if (key_) {
@@ -285,7 +289,7 @@ flush_transaction_to_journal(LocalTxn *txn)
   for (TxnOperation *op = txn->oldest_op;
                   op != 0;
                   op = op->next_in_txn) {
-    if (ISSET(op->flags, TxnOperation::kErase)) {
+    if (op->effect == TxnOperation::ERASES_EXISTING_KEY) {
       journal->append_erase(op->node->db, txn,
                       op->node->key(), op->referenced_duplicate,
                       op->original_flags, op->lsn);
@@ -527,43 +531,51 @@ struct KeyCounter : TxnIndex::Visitor {
         if (ISSET(op->flags, TxnOperation::kIsFlushed))
           break;
 
-        if ( ISSET(op->flags, TxnOperation::kErase) )
-        { // if key was erased then it doesn't exist
-          if( uncertainty == kNoUncertainty )
-            counter--;
-          // Otherwise the uncertainty about the existence of the key
-          // was incorrectly "handled" as if the key existed and therefore
-          // the counter was not incremented as it should.
+        switch ( op->effect )
+        {
+        case TxnOperation::INSERTS_NEW_KEY:
+          ++counter; break;
 
-          // TODO: In fact, we may now face a remove-all-dupes
-          // TODO: vs remove a single dupe type of uncertainty.
-          // TODO: Must create a unit test
-          uncertainty = kNoUncertainty;
-        }
-        else if ( ISSET(op->flags, TxnOperation::kInsert) )
-        { // key exists - include it
-          uncertainty = kNoUncertainty;
-          counter++;
-        }
-        else if ( ISSET(op->flags, TxnOperation::kInsertOverwrite) )
-        {
-          // Not incrementing the counter, assuming that the key
-          // existed and this was an overwrite, however remaining
-          // uncertain about it
-          uncertainty = kInsertVsOverwrite;
-        }
-        else
-        {
-          assert(ISSET(op->flags, TxnOperation::kInsertDuplicate));
-          if ( distinct ) {
-            // Not incrementing the counter, assuming that the key
-            // existed and this was an addition of a duplicate key,
-            // however remaining uncertain about it
-            uncertainty = kCreateVsDuplicate;
-          } else {
+        case TxnOperation::OVERWRITES_EXISTING_KEY:
+          break;
+
+        case TxnOperation::DUPLICATES_EXISTING_KEY:
+          if ( !distinct )
+            ++counter;
+          break;
+
+        case TxnOperation::ERASES_EXISTING_KEY:
+          --counter; // XXX: what if there were duplicate keys?
+          break;
+
+        case TxnOperation::UNKNOWN_EFFECT:
+          assert ( ! ISSET(op->flags, TxnOperation::kErase) );
+          if ( ISSET(op->flags, TxnOperation::kInsert) )
+          { // key exists - include it
             uncertainty = kNoUncertainty;
             counter++;
           }
+          else if ( ISSET(op->flags, TxnOperation::kInsertOverwrite) )
+          {
+            // Not incrementing the counter, assuming that the key
+            // existed and this was an overwrite, however remaining
+            // uncertain about it
+            uncertainty = kInsertVsOverwrite;
+          }
+          else
+          {
+            assert(ISSET(op->flags, TxnOperation::kInsertDuplicate));
+            if ( distinct ) {
+              // Not incrementing the counter, assuming that the key
+              // existed and this was an addition of a duplicate key,
+              // however remaining uncertain about it
+              uncertainty = kCreateVsDuplicate;
+            } else {
+              uncertainty = kNoUncertainty;
+              counter++;
+            }
+          }
+          break;
         }
       }
 

@@ -148,7 +148,7 @@ append_txn_duplicates(LocalCursor *cursor, Context *context)
     }
 
     // a normal erase will erase ALL duplicate keys
-    if (ISSET(op->flags, TxnOperation::kErase)) {
+    if (op->effect == TxnOperation::ERASES_EXISTING_KEY) {
       uint32_t ref = op->referenced_duplicate;
       if (ref) {
         assert(ref <= cursor->duplicate_cache.size());
@@ -234,7 +234,7 @@ static inline bool
 txn_cursor_is_erase(TxnCursor *txnc)
 {
   TxnOperation *op = txnc->get_coupled_op();
-  return op ? ISSET(op->flags, TxnOperation::kErase) : false;
+  return op ? op->effect == TxnOperation::ERASES_EXISTING_KEY : false;
 }
 
 // Compares btree and txn-cursor; stores result in lastcmp

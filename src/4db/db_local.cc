@@ -158,7 +158,7 @@ is_key_erased(Context *context, TxnIndex *txn_index, ups_key_t *key)
     if (optxn->is_committed() || context->txn == optxn) {
       if (ISSET(op->flags, TxnOperation::kIsFlushed))
         continue; // XXX: why looking at operations preceding flushed ones?
-      if (ISSET(op->flags, TxnOperation::kErase)) {
+      if (op->effect == TxnOperation::ERASES_EXISTING_KEY) {
         // TODO does not check duplicates!!
         return true;
       }
@@ -199,7 +199,7 @@ check_erase_conflicts(LocalDb *db, Context *context, TxnNode *node,
         continue; // XXX: why are flushed operations simply ignored???
       // if key was erased then it doesn't exist and can be
       // inserted without problems
-      if (ISSET(op->flags, TxnOperation::kErase))
+      if (op->effect == TxnOperation::ERASES_EXISTING_KEY)
         return UPS_KEY_NOT_FOUND;
       // if the key already exists then we can only continue if
       // we're allowed to overwrite it or to insert a duplicate
@@ -252,7 +252,7 @@ check_insert_conflicts(LocalDb *db, Context *context, TxnNode *node,
         continue; // XXX: why are flushed operations simply ignored???
       /* if key was erased then it doesn't exist and can be
        * inserted without problems */
-      if (ISSET(op->flags, TxnOperation::kErase))
+      if (op->effect == TxnOperation::ERASES_EXISTING_KEY)
         return 0;
       /* if the key already exists then we can only continue if
        * we're allowed to overwrite it or to insert a duplicate */
@@ -453,7 +453,7 @@ FindTxn::check_txn_node(ups_key_t *key, TxnNode* node, ups_record_t *record, uin
         return handle_key_inserted_in_a_txn(key, record);
       }
 
-      if (ISSET(op->flags, TxnOperation::kErase)) {
+      if (op->effect == TxnOperation::ERASES_EXISTING_KEY) {
         return handle_key_erased_in_a_txn(key, flags);
       }
 
@@ -1731,7 +1731,7 @@ LocalDb::flush_txn_operation(Context *context, LocalTxn *txn, TxnOperation *op)
       }
     }
   }
-  else if (ISSET(op->flags, TxnOperation::kErase)) {
+  else if (op->effect == TxnOperation::ERASES_EXISTING_KEY) {
     st = btree_index->erase(context, 0, node->key(),
                   op->referenced_duplicate, op->flags);
     if (unlikely(st == UPS_KEY_NOT_FOUND))

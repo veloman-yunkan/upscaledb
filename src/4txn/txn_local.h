@@ -65,6 +65,14 @@ struct TxnOperation {
     kIsFlushed        = 0x100000u
   };
 
+  enum Effect {
+    UNKNOWN_EFFECT,
+    INSERTS_NEW_KEY,
+    OVERWRITES_EXISTING_KEY,
+    DUPLICATES_EXISTING_KEY,
+    ERASES_EXISTING_KEY
+  };
+
   // This Operation was flushed to disk
   void set_flushed() {
     flags |= kIsFlushed;
@@ -92,6 +100,8 @@ struct TxnOperation {
   // the original flags of this operation, used when calling
   // ups_cursor_insert, ups_insert, ups_erase etc
   uint32_t original_flags;
+
+  Effect effect;
 
   // the referenced duplicate id (if neccessary) - used if this is
   // i.e. a ups_cursor_erase, ups_cursor_overwrite or ups_cursor_insert
@@ -298,7 +308,7 @@ struct LocalTxnManager : TxnManager {
   // Flushes committed (queued) transactions
   virtual void flush_committed_txns(Context *context = 0);
 
-  // Increments the global transaction ID and returns the new value. 
+  // Increments the global transaction ID and returns the new value.
   uint64_t incremented_txn_id() {
     return ++_txn_id;
   }
