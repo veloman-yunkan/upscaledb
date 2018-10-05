@@ -124,7 +124,7 @@ is_modified_by_active_transaction(TxnIndex *txn_index)
       // if the transaction is still active, or if it is committed
       // but was not yet flushed then return an error
       if (!optxn->is_aborted() && !optxn->is_committed())
-        if (NOTSET(op->flags, TxnOperation::kIsFlushed)) // XXX: always true
+        if (!op->is_flushed) // XXX: always true
           return true;
     }
   }
@@ -133,9 +133,9 @@ is_modified_by_active_transaction(TxnIndex *txn_index)
 
 static inline bool
 is_an_insertion(const TxnOperation* op) {
-  return ISSETANY(op->flags, TxnOperation::kInsert
-                             | TxnOperation::kInsertOverwrite
-                             | TxnOperation::kInsertDuplicate);
+  return op->effect == TxnOperation::INSERTS_NEW_KEY
+      || op->effect == TxnOperation::OVERWRITES_EXISTING_KEY
+      || op->effect == TxnOperation::DUPLICATES_EXISTING_KEY;
 }
 
 
@@ -156,7 +156,7 @@ is_key_erased(Context *context, TxnIndex *txn_index, ups_key_t *key)
     if (optxn->is_aborted())
       continue;
     if (optxn->is_committed() || context->txn == optxn) {
-      if (ISSET(op->flags, TxnOperation::kIsFlushed))
+      if (op->is_flushed)
         continue; // XXX: why looking at operations preceding flushed ones?
       if (op->effect == TxnOperation::ERASES_EXISTING_KEY) {
         // TODO does not check duplicates!!
@@ -195,7 +195,7 @@ check_erase_conflicts(LocalDb *db, Context *context, TxnNode *node,
       continue;
 
     if (optxn->is_committed() || context->txn == optxn) {
-      if (ISSET(op->flags, TxnOperation::kIsFlushed))
+      if (op->is_flushed)
         continue; // XXX: why are flushed operations simply ignored???
       // if key was erased then it doesn't exist and can be
       // inserted without problems
@@ -205,11 +205,9 @@ check_erase_conflicts(LocalDb *db, Context *context, TxnNode *node,
       // we're allowed to overwrite it or to insert a duplicate
       if (is_an_insertion(op))
         return 0;
-      if (NOTSET(op->flags, TxnOperation::kNop)) {
-        assert(!"shouldn't be here");
-        return UPS_INTERNAL_ERROR;
-      }
-      continue;
+
+      assert(!"shouldn't be here");
+      return UPS_INTERNAL_ERROR;
     }
 
     // txn is still active
@@ -223,9 +221,28 @@ check_erase_conflicts(LocalDb *db, Context *context, TxnNode *node,
   return db->btree_index->find(context, 0, key, 0, 0, 0, flags);
 }
 
+struct InsertionStatus {
+  InsertionStatus(ups_status_t st)
+    : ups_status(st), effect(TxnOperation::UNKNOWN_EFFECT)
+  {
+    assert(st != UPS_SUCCESS);
+  }
+
+  InsertionStatus(TxnOperation::Effect eff)
+    : ups_status(UPS_SUCCESS), effect(eff)
+  {
+    assert(effect == TxnOperation::INSERTS_NEW_KEY ||
+           effect == TxnOperation::OVERWRITES_EXISTING_KEY ||
+           effect == TxnOperation::DUPLICATES_EXISTING_KEY);
+  }
+
+  ups_status_t ups_status;
+  TxnOperation::Effect effect; // meaningful only if status == UPS_SUCCESS
+};
+
 // Checks if an insert operation conflicts with another txn; this is the
 // case if the same key is modified by another active txn.
-static inline ups_status_t
+static inline InsertionStatus
 check_insert_conflicts(LocalDb *db, Context *context, TxnNode *node,
                     ups_key_t *key, uint32_t flags)
 {
@@ -248,24 +265,25 @@ check_insert_conflicts(LocalDb *db, Context *context, TxnNode *node,
       continue;
 
     if (optxn->is_committed() || context->txn == optxn) {
-      if (ISSET(op->flags, TxnOperation::kIsFlushed))
+      if (op->is_flushed)
         continue; // XXX: why are flushed operations simply ignored???
       /* if key was erased then it doesn't exist and can be
        * inserted without problems */
+      // XXX: what if there are duplicates of the erased key?
       if (op->effect == TxnOperation::ERASES_EXISTING_KEY)
-        return 0;
+        return TxnOperation::INSERTS_NEW_KEY;
       /* if the key already exists then we can only continue if
        * we're allowed to overwrite it or to insert a duplicate */
       if (is_an_insertion(op)) {
-        if (ISSETANY(flags, UPS_OVERWRITE | UPS_DUPLICATE))
-          return 0;
+        if (ISSET(flags, UPS_OVERWRITE))
+          return TxnOperation::OVERWRITES_EXISTING_KEY;
+        if (ISSET(flags, UPS_DUPLICATE))
+          return TxnOperation::DUPLICATES_EXISTING_KEY;
         return UPS_DUPLICATE_KEY;
       }
-      if (NOTSET(op->flags, TxnOperation::kNop)) {
-        assert(!"shouldn't be here");
-        return UPS_INTERNAL_ERROR;
-      }
-      continue;
+
+      assert(!"shouldn't be here");
+      return UPS_INTERNAL_ERROR;
     }
 
     // txn is still active
@@ -276,17 +294,17 @@ check_insert_conflicts(LocalDb *db, Context *context, TxnNode *node,
   // were no conflicts. Now check all transactions which are already
   // flushed - basically that's identical to a btree lookup.
   //
-  // we can skip this check if we do not care about duplicates.
-  if (ISSETANY(flags, UPS_OVERWRITE | UPS_DUPLICATE
-                          | UPS_HINT_APPEND | UPS_HINT_PREPEND))
-    return 0;
 
   ByteArray *arena = &db->key_arena(context->txn);
   ups_status_t st = db->btree_index->find(context, 0, key, arena, 0, 0, flags);
   switch (st) {
     case UPS_KEY_NOT_FOUND:
-      return 0;
+      return TxnOperation::INSERTS_NEW_KEY;
     case UPS_SUCCESS:
+      if (ISSETANY(flags, UPS_OVERWRITE))
+        return TxnOperation::OVERWRITES_EXISTING_KEY;
+      if (ISSETANY(flags, UPS_DUPLICATE))
+        return TxnOperation::DUPLICATES_EXISTING_KEY;
       return UPS_DUPLICATE_KEY;
     default:
       return st;
@@ -446,7 +464,7 @@ FindTxn::check_txn_node(ups_key_t *key, TxnNode* node, ups_record_t *record, uin
       continue;
 
     if (optxn->is_committed() || context->txn == optxn) {
-      if (unlikely(ISSET(op->flags, TxnOperation::kIsFlushed)))
+      if (unlikely(op->is_flushed))
         continue; // XXX: why are flushed operations simply ignored???
 
       if (is_an_insertion(op)) {
@@ -457,12 +475,8 @@ FindTxn::check_txn_node(ups_key_t *key, TxnNode* node, ups_record_t *record, uin
         return handle_key_erased_in_a_txn(key, flags);
       }
 
-      if (unlikely(NOTSET(op->flags, TxnOperation::kNop))) {
-        assert(!"shouldn't be here");
-        return KEY_NOT_FOUND;
-      }
-
-      continue;
+      assert(!"shouldn't be here");
+      return KEY_NOT_FOUND;
     }
 
     return TXN_CONFLICT;
@@ -654,7 +668,7 @@ erase_txn(LocalDb *db, Context *context, ups_key_t *key, uint32_t flags,
   uint64_t lsn = lenv(db)->lsn_manager.next();
 
   // append a new operation to this node
-  TxnOperation *op = node->append(context->txn, flags, TxnOperation::kErase,
+  TxnOperation *op = node->append(context->txn, flags, TxnOperation::ERASES_EXISTING_KEY,
                   lsn, key, 0);
 
   // is this function called through ups_cursor_erase? then add the
@@ -1073,7 +1087,8 @@ insert_txn(LocalDb *db, Context *context, ups_key_t *key, ups_record_t *record,
   TxnNode *node = db->txn_index->store(key, &node_created);
 
   // check for conflicts of this key
-  ups_status_t st = check_insert_conflicts(db, context, node, key, flags);
+  const InsertionStatus ins_st = check_insert_conflicts(db, context, node, key, flags);
+  ups_status_t st = ins_st.ups_status;
   if (unlikely(st)) {
     if (node_created) {
       db->txn_index->remove(node);
@@ -1086,11 +1101,7 @@ insert_txn(LocalDb *db, Context *context, ups_key_t *key, ups_record_t *record,
 
   // append a new operation to this node
   TxnOperation *op = node->append(context->txn, flags,
-                (ISSET(flags, UPS_DUPLICATE)
-                    ? TxnOperation::kInsertDuplicate
-                    : ISSET(flags, UPS_OVERWRITE)
-                        ? TxnOperation::kInsertOverwrite
-                        : TxnOperation::kInsert),
+                ins_st.effect,
                 lsn, key, record);
 
   // if there's a cursor then couple it to the op; also store the
@@ -1694,10 +1705,11 @@ LocalDb::flush_txn_operation(Context *context, LocalTxn *txn, TxnOperation *op)
   // to the btree item instead.
   //
   if (is_an_insertion(op)) {
-    uint32_t additional_flag =
-      ISSET(op->flags, TxnOperation::kInsertDuplicate)
-          ? UPS_DUPLICATE
-          : UPS_OVERWRITE;
+    uint32_t additional_flag = 0;
+    if ( op->effect == TxnOperation::DUPLICATES_EXISTING_KEY )
+      additional_flag = UPS_DUPLICATE;
+    else if ( op->effect == TxnOperation::OVERWRITES_EXISTING_KEY )
+      additional_flag = UPS_OVERWRITE;
 
     LocalCursor *c1 = op->cursor_list
                             ? op->cursor_list->parent()
@@ -1733,7 +1745,7 @@ LocalDb::flush_txn_operation(Context *context, LocalTxn *txn, TxnOperation *op)
   }
   else if (op->effect == TxnOperation::ERASES_EXISTING_KEY) {
     st = btree_index->erase(context, 0, node->key(),
-                  op->referenced_duplicate, op->flags);
+                  op->referenced_duplicate, op->original_flags);
     if (unlikely(st == UPS_KEY_NOT_FOUND))
       st = 0;
   }

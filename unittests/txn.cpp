@@ -143,13 +143,13 @@ struct TxnFixture : BaseFixture {
     bool node_created;
     TxnNode *node = ldb()->txn_index->store(&key, &node_created);
     TxnOperation *op1 = node->append(txnp.ltxn(), 0,
-                    TxnOperation::kInsertDuplicate, 55, &key, &rec);
+                    TxnOperation::INSERTS_NEW_KEY, 55, &key, &rec);
     REQUIRE(op1 != nullptr);
     TxnOperation *op2 = node->append(txnp.ltxn(), 0,
-                    TxnOperation::kErase, 56, &key, &rec);
+                    TxnOperation::ERASES_EXISTING_KEY, 56, &key, &rec);
     REQUIRE(op2 != nullptr);
     TxnOperation *op3 = node->append(txnp.ltxn(), 0,
-                TxnOperation::kNop, 57, &key, &rec);
+                TxnOperation::INSERTS_NEW_KEY, 57, &key, &rec);
     REQUIRE(op3 != nullptr);
   }
 

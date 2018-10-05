@@ -100,14 +100,14 @@ append_txn_duplicates(LocalCursor *cursor, Context *context)
     // a normal (overwriting) insert will overwrite ALL duplicates,
     // but an overwrite of a duplicate will only overwrite
     // an entry in the DuplicateCache
-    if (ISSET(op->flags, TxnOperation::kInsert)) {
+    if (op->effect == TxnOperation::INSERTS_NEW_KEY) {
       // all existing duplicates are overwritten
       cursor->duplicate_cache.clear();
       cursor->duplicate_cache.push_back(DuplicateCacheLine(false, op));
       continue;
     }
 
-    if (ISSET(op->flags, TxnOperation::kInsertOverwrite)) {
+    if (op->effect == TxnOperation::OVERWRITES_EXISTING_KEY) {
       uint32_t ref = op->referenced_duplicate;
       if (ref) {
         assert(ref <= cursor->duplicate_cache.size());
@@ -123,7 +123,7 @@ append_txn_duplicates(LocalCursor *cursor, Context *context)
     }
 
     // insert a duplicate key
-    if (ISSET(op->flags, TxnOperation::kInsertDuplicate)) {
+    if (op->effect == TxnOperation::DUPLICATES_EXISTING_KEY) {
       uint32_t of = op->original_flags;
       uint32_t ref = op->referenced_duplicate - 1;
       DuplicateCacheLine dcl(false, op);
@@ -225,7 +225,7 @@ check_if_btree_key_is_erased_or_overwritten(LocalCursor *cursor,
     return st;
 
   TxnOperation *op = txn_cursor.get_coupled_op();
-  if (ISSET(op->flags, TxnOperation::kInsertDuplicate))
+  if (op->effect == TxnOperation::DUPLICATES_EXISTING_KEY)
     st = UPS_KEY_NOT_FOUND;
   return st;
 }

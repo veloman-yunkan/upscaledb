@@ -15,7 +15,7 @@
  *
  * See the file COPYING for License information.
  */
- 
+
 
 #include "3rdparty/catch/catch.hpp"
 
@@ -66,7 +66,7 @@ struct TxnCursorFixture : BaseFixture {
     TxnProxy txnp(env);
     TxnNode *node = create_transaction_node(&key);
     TxnOperation *op = node->append(txnp.ltxn(), 0,
-                TxnOperation::kInsertDuplicate, 55, &key, &record);
+                TxnOperation::INSERTS_NEW_KEY, 55, &key, &record);
     REQUIRE(op != nullptr);
 
     TxnCursor c((LocalCursor *)cursor);
@@ -88,7 +88,7 @@ struct TxnCursorFixture : BaseFixture {
     TxnProxy txnp(env);
     TxnNode *node = create_transaction_node(&key);
     TxnOperation *op = node->append(txnp.ltxn(), 0,
-                TxnOperation::kInsertDuplicate, 55, &key, &record);
+                TxnOperation::INSERTS_NEW_KEY, 55, &key, &record);
     REQUIRE(op != nullptr);
 
     TxnCursor c((LocalCursor *)cursor);
@@ -109,7 +109,7 @@ struct TxnCursorFixture : BaseFixture {
     TxnProxy txnp(env);
     TxnNode *node = create_transaction_node(&key);
     TxnOperation *op = node->append(txnp.ltxn(), 0,
-                TxnOperation::kInsertDuplicate, 55, &key, &record);
+                TxnOperation::INSERTS_NEW_KEY, 55, &key, &record);
     REQUIRE(op != nullptr);
 
     TxnCursor c((LocalCursor *)cursor);
@@ -129,7 +129,7 @@ struct TxnCursorFixture : BaseFixture {
     TxnProxy txnp(env);
     TxnNode *node = create_transaction_node(&key);
     TxnOperation *op = node->append(txnp.ltxn(), 0,
-                TxnOperation::kInsertDuplicate, 55, &key, &record);
+                TxnOperation::INSERTS_NEW_KEY, 55, &key, &record);
     REQUIRE(op != nullptr);
 
     TxnCursor c((LocalCursor *)cursor);
@@ -146,7 +146,7 @@ struct TxnCursorFixture : BaseFixture {
     TxnProxy txnp(env);
     TxnNode *node = create_transaction_node(&key);
     TxnOperation *op = node->append(txnp.ltxn(), 0,
-                TxnOperation::kInsertDuplicate, 55, &key, &record);
+                TxnOperation::INSERTS_NEW_KEY, 55, &key, &record);
     REQUIRE(op != nullptr);
 
     TxnCursor c((LocalCursor *)cursor);
@@ -171,7 +171,7 @@ struct TxnCursorFixture : BaseFixture {
     TxnProxy txnp(env);
     TxnNode *node = create_transaction_node(&key);
     TxnOperation *op = node->append(txnp.ltxn(), 0,
-                TxnOperation::kInsertDuplicate, 55, &key, &record);
+                TxnOperation::INSERTS_NEW_KEY, 55, &key, &record);
     REQUIRE(op != nullptr);
 
     TxnCursor c((LocalCursor *)cursor);
@@ -192,7 +192,7 @@ struct TxnCursorFixture : BaseFixture {
     TxnProxy txnp(env);
     TxnNode *node = create_transaction_node(&key);
     TxnOperation *op = node->append(txnp.ltxn(), 0,
-                TxnOperation::kInsertDuplicate, 55, &key, &record);
+                TxnOperation::INSERTS_NEW_KEY, 55, &key, &record);
     REQUIRE(op != nullptr);
 
     TxnCursor c((LocalCursor *)cursor);
@@ -213,7 +213,7 @@ struct TxnCursorFixture : BaseFixture {
     TxnProxy txnp(env);
     TxnNode *node = create_transaction_node(&key);
     TxnOperation *op = node->append(txnp.ltxn(), 0,
-                TxnOperation::kInsertDuplicate, 55, &key, &record);
+                TxnOperation::INSERTS_NEW_KEY, 55, &key, &record);
     REQUIRE(op != nullptr);
 
     TxnCursor c((LocalCursor *)cursor);
@@ -305,65 +305,65 @@ struct TxnCursorFixture : BaseFixture {
   void findInsertEraseTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // insert two different keys, delete the first one 
+    // insert two different keys, delete the first one
     REQUIRE(0 == insert(txnp.txn, "key1"));
     REQUIRE(0 == erase(txnp.txn, "key1"));
     REQUIRE(0 == insert(txnp.txn, "key2"));
 
-    // find the first key - fails 
+    // find the first key - fails
     REQUIRE(UPS_KEY_ERASED_IN_TXN == findCursor(cursor, "key1"));
 
-    // insert it again 
+    // insert it again
     REQUIRE(0 == insert(txnp.txn, "key1"));
     REQUIRE(0 == findCursor(cursor, "key1"));
 
-    // find second key 
+    // find second key
     REQUIRE(0 == findCursor(cursor, "key2"));
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
   void findInsertEraseOverwriteTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // insert a key and overwrite it twice 
+    // insert a key and overwrite it twice
     REQUIRE(0 == insert(txnp.txn, "key1", "rec1"));
     REQUIRE(0 == insert(txnp.txn, "key1", "rec2", UPS_OVERWRITE));
     REQUIRE(0 == insert(txnp.txn, "key1", "rec3", UPS_OVERWRITE));
 
-    // find the first key 
+    // find the first key
     REQUIRE(0 == findCursor(cursor, "key1"));
 
-    // erase it, then insert it again 
+    // erase it, then insert it again
     REQUIRE(0 == erase(txnp.txn, "key1"));
     REQUIRE(0 == insert(txnp.txn, "key1", "rec4", UPS_OVERWRITE));
     REQUIRE(0 == findCursor(cursor, "key1"));
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
   void findInsertTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // insert two different keys 
+    // insert two different keys
     REQUIRE(0 == insert(txnp.txn, "key1"));
     REQUIRE(0 == insert(txnp.txn, "key2"));
 
-    // find the first key 
+    // find the first key
     REQUIRE(0 == findCursor(cursor, "key1"));
 
-    // now the cursor is coupled to this key 
+    // now the cursor is coupled to this key
     TxnCursor *txnc = txn_cursor(cursor);
     REQUIRE(!txnc->is_nil());
     TxnOperation *op = txnc->get_coupled_op();
@@ -371,35 +371,35 @@ struct TxnCursorFixture : BaseFixture {
     REQUIRE(5 == key->size);
     REQUIRE(0 == ::strcmp((char *)key->data, "key1"));
 
-    // now the key is coupled; find second key 
+    // now the key is coupled; find second key
     REQUIRE(0 == findCursor(cursor, "key2"));
 
-    // and the cursor is still coupled 
+    // and the cursor is still coupled
     REQUIRE(!txnc->is_nil());
     op = txnc->get_coupled_op();
     key = op->node->key();
     REQUIRE(5 == key->size);
     REQUIRE(0 == ::strcmp((char *)key->data, "key2"));
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
   void moveFirstTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // insert a few different keys 
+    // insert a few different keys
     REQUIRE(0 == insert(txnp.txn, "key1"));
     REQUIRE(0 == insert(txnp.txn, "key2"));
     REQUIRE(0 == insert(txnp.txn, "key3"));
 
-    // find the first key (with a nil cursor) 
+    // find the first key (with a nil cursor)
     REQUIRE(0 == moveCursor(cursor, "key1", UPS_CURSOR_FIRST));
 
-    // now the cursor is coupled to this key 
+    // now the cursor is coupled to this key
     TxnCursor *txnc = txn_cursor(cursor);
     REQUIRE(!txnc->is_nil());
     TxnOperation *op = txnc->get_coupled_op();
@@ -407,27 +407,27 @@ struct TxnCursorFixture : BaseFixture {
     REQUIRE(5 == key->size);
     REQUIRE(0 == ::strcmp((char *)key->data, "key1"));
 
-    // do it again with a coupled cursor 
+    // do it again with a coupled cursor
     REQUIRE(0 == moveCursor(cursor, "key1", UPS_CURSOR_FIRST));
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
   void moveFirstInEmptyTreeTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // find the first key 
+    // find the first key
     REQUIRE(UPS_KEY_NOT_FOUND == moveCursor(cursor, "key1", UPS_CURSOR_FIRST));
 
-    // now the cursor is nil 
+    // now the cursor is nil
     TxnCursor *txnc = txn_cursor(cursor);
     REQUIRE(true == txnc->is_nil());
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
@@ -435,51 +435,51 @@ struct TxnCursorFixture : BaseFixture {
     TxnProxy txnp1(env);
     TxnProxy txnp2(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp1.ltxn();
 
-    // insert a key, then erase it 
+    // insert a key, then erase it
     REQUIRE(0 == insert(txnp2.txn, "key1"));
     REQUIRE(UPS_TXN_CONFLICT == findCursor(cursor, "key1"));
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
   void moveNextWithNilCursorTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // make sure that the cursor is nil 
+    // make sure that the cursor is nil
     TxnCursor *txnc = txn_cursor(cursor);
     REQUIRE(true == txnc->is_nil());
 
     REQUIRE(UPS_CURSOR_IS_NIL == moveCursor(cursor, 0, UPS_CURSOR_NEXT));
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
   void moveNextTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // insert a few different keys 
+    // insert a few different keys
     REQUIRE(0 == insert(txnp.txn, "key1"));
     REQUIRE(0 == insert(txnp.txn, "key2"));
     REQUIRE(0 == insert(txnp.txn, "key3"));
 
-    // find the first key 
+    // find the first key
     REQUIRE(0 == findCursor(cursor, "key1"));
 
-    // move next 
+    // move next
     REQUIRE(0 == moveCursor(cursor, "key2", UPS_CURSOR_NEXT));
 
-    // now the cursor is coupled to this key 
+    // now the cursor is coupled to this key
     TxnCursor *txnc = txn_cursor(cursor);
     REQUIRE(!txnc->is_nil());
     TxnOperation *op = txnc->get_coupled_op();
@@ -487,74 +487,74 @@ struct TxnCursorFixture : BaseFixture {
     REQUIRE(5 == key->size);
     REQUIRE(0 == ::strcmp((char *)key->data, "key2"));
 
-    // now the key is coupled; move next once more 
+    // now the key is coupled; move next once more
     REQUIRE(0 == moveCursor(cursor, "key3", UPS_CURSOR_NEXT));
 
-    // and the cursor is still coupled 
+    // and the cursor is still coupled
     REQUIRE(!txnc->is_nil());
     op = txnc->get_coupled_op();
     key = op->node->key();
     REQUIRE(5 == key->size);
     REQUIRE(0 == ::strcmp((char *)key->data, "key3"));
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
   void moveNextAfterEndTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // insert one key 
+    // insert one key
     REQUIRE(0 == insert(txnp.txn, "key1"));
 
-    // find the first key 
+    // find the first key
     REQUIRE(0 == findCursor(cursor, "key1"));
 
-    // move next 
+    // move next
     REQUIRE(UPS_KEY_NOT_FOUND == moveCursor(cursor, "key2", UPS_CURSOR_NEXT));
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
   void moveNextSkipEraseTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // insert/erase keys 
+    // insert/erase keys
     REQUIRE(0 == insert(txnp.txn, "key1"));
     REQUIRE(0 == insert(txnp.txn, "key2"));
     REQUIRE(0 == erase(txnp.txn, "key2"));
     REQUIRE(0 == insert(txnp.txn, "key3"));
 
-    // find the first key 
+    // find the first key
     REQUIRE(0 == findCursor(cursor, "key1"));
 
-    // move next 
+    // move next
     REQUIRE(UPS_KEY_ERASED_IN_TXN == moveCursor(cursor, 0, UPS_CURSOR_NEXT));
 
-    // move next 
+    // move next
     REQUIRE(0 == moveCursor(cursor, "key3", UPS_CURSOR_NEXT));
 
-    // reached the end 
+    // reached the end
     REQUIRE(UPS_KEY_NOT_FOUND == moveCursor(cursor, "key3", UPS_CURSOR_NEXT));
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
   void moveNextSkipEraseInNodeTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // insert/erase keys 
+    // insert/erase keys
     REQUIRE(0 == insert(txnp.txn, "key1"));
     REQUIRE(0 == insert(txnp.txn, "key2"));
     REQUIRE(0 == erase(txnp.txn, "key2"));
@@ -564,37 +564,37 @@ struct TxnCursorFixture : BaseFixture {
     REQUIRE(0 == erase(txnp.txn, "key2"));
     REQUIRE(0 == insert(txnp.txn, "key3"));
 
-    // find the first key 
+    // find the first key
     REQUIRE(0 == findCursor(cursor, "key1"));
 
-    // move next 
+    // move next
     REQUIRE(UPS_KEY_ERASED_IN_TXN == moveCursor(cursor, 0, UPS_CURSOR_NEXT));
 
-    // move next 
+    // move next
     REQUIRE(0 == moveCursor(cursor, "key3", UPS_CURSOR_NEXT));
 
-    // reached the end 
+    // reached the end
     REQUIRE(UPS_KEY_NOT_FOUND == moveCursor(cursor, "key3", UPS_CURSOR_NEXT));
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
   void moveLastTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // insert a few different keys 
+    // insert a few different keys
     REQUIRE(0 == insert(txnp.txn, "key1"));
     REQUIRE(0 == insert(txnp.txn, "key2"));
     REQUIRE(0 == insert(txnp.txn, "key3"));
 
-    // find the last key (with a nil cursor) 
+    // find the last key (with a nil cursor)
     REQUIRE(0 == moveCursor(cursor, "key3", UPS_CURSOR_LAST));
 
-    // now the cursor is coupled to this key 
+    // now the cursor is coupled to this key
     TxnCursor *txnc = txn_cursor(cursor);
     REQUIRE(!txnc->is_nil());
     TxnOperation *op = txnc->get_coupled_op();
@@ -602,64 +602,64 @@ struct TxnCursorFixture : BaseFixture {
     REQUIRE(5 == key->size);
     REQUIRE(0 == ::strcmp((char *)key->data, "key3"));
 
-    // do it again with a coupled cursor 
+    // do it again with a coupled cursor
     REQUIRE(0 == moveCursor(cursor, "key3", UPS_CURSOR_LAST));
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
   void moveLastInEmptyTreeTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // find the first key 
+    // find the first key
     REQUIRE(UPS_KEY_NOT_FOUND == moveCursor(cursor, "key1", UPS_CURSOR_LAST));
 
-    // now the cursor is nil 
+    // now the cursor is nil
     TxnCursor *txnc = txn_cursor(cursor);
     REQUIRE(true == txnc->is_nil());
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
   void movePrevWithNilCursorTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // make sure that the cursor is nil 
+    // make sure that the cursor is nil
     TxnCursor *txnc = txn_cursor(cursor);
     REQUIRE(true == txnc->is_nil());
 
     REQUIRE(UPS_CURSOR_IS_NIL == moveCursor(cursor, 0, UPS_CURSOR_PREVIOUS));
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
   void movePrevTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // insert a few different keys 
+    // insert a few different keys
     REQUIRE(0 == insert(txnp.txn, "key1"));
     REQUIRE(0 == insert(txnp.txn, "key2"));
     REQUIRE(0 == insert(txnp.txn, "key3"));
 
-    // find the last key 
+    // find the last key
     REQUIRE(0 == findCursor(cursor, "key3"));
 
-    // move previous 
+    // move previous
     REQUIRE(0 == moveCursor(cursor, "key2", UPS_CURSOR_PREVIOUS));
 
-    // now the cursor is coupled to this key 
+    // now the cursor is coupled to this key
     TxnCursor *txnc = txn_cursor(cursor);
     REQUIRE(!txnc->is_nil());
     TxnOperation *op = txnc->get_coupled_op();
@@ -667,77 +667,77 @@ struct TxnCursorFixture : BaseFixture {
     REQUIRE(5 == key->size);
     REQUIRE(0 == ::strcmp((char *)key->data, "key2"));
 
-    // now the key is coupled; move previous once more 
+    // now the key is coupled; move previous once more
     REQUIRE(0 == moveCursor(cursor, "key1", UPS_CURSOR_PREVIOUS));
 
-    // and the cursor is still coupled 
+    // and the cursor is still coupled
     REQUIRE(!txnc->is_nil());
     op = txnc->get_coupled_op();
     key = op->node->key();
     REQUIRE(5 == key->size);
     REQUIRE(0 == ::strcmp((char *)key->data, "key1"));
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
   void movePrevAfterEndTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // insert one key 
+    // insert one key
     REQUIRE(0 == insert(txnp.txn, "key1"));
 
-    // find the first key 
+    // find the first key
     REQUIRE(0 == findCursor(cursor, "key1"));
 
-    // move previous 
+    // move previous
     REQUIRE(UPS_KEY_NOT_FOUND ==
           moveCursor(cursor, "key2", UPS_CURSOR_PREVIOUS));
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
   void movePrevSkipEraseTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // insert/erase keys 
+    // insert/erase keys
     REQUIRE(0 == insert(txnp.txn, "key1"));
     REQUIRE(0 == insert(txnp.txn, "key2"));
     REQUIRE(0 == erase(txnp.txn, "key2"));
     REQUIRE(0 == insert(txnp.txn, "key3"));
 
-    // find the first key 
+    // find the first key
     REQUIRE(0 == findCursor(cursor, "key3"));
 
-    // move previous 
+    // move previous
     REQUIRE(UPS_KEY_ERASED_IN_TXN ==
           moveCursor(cursor, 0, UPS_CURSOR_PREVIOUS));
 
-    // move previous 
+    // move previous
     REQUIRE(0 == moveCursor(cursor, "key1", UPS_CURSOR_PREVIOUS));
 
-    // reached the end 
+    // reached the end
     REQUIRE(UPS_KEY_NOT_FOUND ==
           moveCursor(cursor, "key1", UPS_CURSOR_PREVIOUS));
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
   void movePrevSkipEraseInNodeTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // insert/erase keys 
+    // insert/erase keys
     REQUIRE(0 == insert(txnp.txn, "key1"));
     REQUIRE(0 == insert(txnp.txn, "key2"));
     REQUIRE(0 == erase(txnp.txn, "key2"));
@@ -747,21 +747,21 @@ struct TxnCursorFixture : BaseFixture {
     REQUIRE(0 == erase(txnp.txn, "key2"));
     REQUIRE(0 == insert(txnp.txn, "key3"));
 
-    // find the last key 
+    // find the last key
     REQUIRE(0 == findCursor(cursor, "key3"));
 
-    // move previous 
+    // move previous
     REQUIRE(UPS_KEY_ERASED_IN_TXN ==
           moveCursor(cursor, 0, UPS_CURSOR_PREVIOUS));
 
-    // move previous 
+    // move previous
     REQUIRE(0 == moveCursor(cursor, "key1", UPS_CURSOR_PREVIOUS));
 
-    // reached the end 
+    // reached the end
     REQUIRE(UPS_KEY_NOT_FOUND ==
           moveCursor(cursor, "key1", UPS_CURSOR_PREVIOUS));
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
@@ -778,15 +778,15 @@ struct TxnCursorFixture : BaseFixture {
   void insertKeysTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // insert a few different keys 
+    // insert a few different keys
     REQUIRE(0 == insertCursor(cursor, "key1"));
     REQUIRE(0 == insertCursor(cursor, "key2"));
     REQUIRE(0 == insertCursor(cursor, "key3"));
 
-    // make sure that the keys exist and that the cursor is coupled 
+    // make sure that the keys exist and that the cursor is coupled
     REQUIRE(0 == findCursor(cursor, "key1"));
     REQUIRE(true == cursorIsCoupled(cursor, "key1"));
     REQUIRE(0 == findCursor(cursor, "key2"));
@@ -794,40 +794,40 @@ struct TxnCursorFixture : BaseFixture {
     REQUIRE(0 == findCursor(cursor, "key3"));
     REQUIRE(true == cursorIsCoupled(cursor, "key3"));
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
   void negativeInsertKeysTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // insert a key twice - creates a duplicate key 
+    // insert a key twice - creates a duplicate key
     REQUIRE(0 == insertCursor(cursor, "key1"));
     REQUIRE(UPS_DUPLICATE_KEY == insertCursor(cursor, "key1"));
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
   void insertOverwriteKeysTest() {
     TxnProxy txnp(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp.ltxn();
 
-    // insert/overwrite keys 
+    // insert/overwrite keys
     REQUIRE(0 == insertCursor(cursor, "key1"));
     REQUIRE(0 == insertCursor(cursor, "key1", 0, UPS_OVERWRITE));
     REQUIRE(0 == insertCursor(cursor, "key1", 0, UPS_OVERWRITE));
 
-    // make sure that the key exists and that the cursor is coupled 
+    // make sure that the key exists and that the cursor is coupled
     REQUIRE(0 == findCursor(cursor, "key1"));
     REQUIRE(true == cursorIsCoupled(cursor, "key1"));
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 
@@ -835,18 +835,18 @@ struct TxnCursorFixture : BaseFixture {
     TxnProxy txnp1(env);
     TxnProxy txnp2(env);
 
-    // hack the cursor and attach it to the txn 
+    // hack the cursor and attach it to the txn
     ((Cursor *)cursor)->txn = txnp1.ltxn();
 
-    // insert/overwrite keys 
+    // insert/overwrite keys
     REQUIRE(0 == insert(txnp2.txn, "key1"));
     REQUIRE(UPS_TXN_CONFLICT == insertCursor(cursor, "key1"));
 
-    // cursor must be nil 
+    // cursor must be nil
     TxnCursor *txnc = txn_cursor(cursor);
     REQUIRE(true == txnc->is_nil());
 
-    // reset cursor hack 
+    // reset cursor hack
     ((Cursor *)cursor)->txn = 0;
   }
 

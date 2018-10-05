@@ -45,26 +45,6 @@ struct LocalEnv;
 // insert or erase) in a Txn.
 //
 struct TxnOperation {
-  enum {
-    // a NOP operation (empty)
-    kNop              = 0x000000u,
-
-    // txn operation is an insert
-    kInsert           = 0x010000u,
-
-    // txn operation is an insert w/ overwrite
-    kInsertOverwrite  = 0x020000u,
-
-    // txn operation is an insert w/ duplicate
-    kInsertDuplicate  = 0x040000u,
-
-    // txn operation erases the key
-    kErase            = 0x080000u,
-
-    // txn operation was already flushed
-    kIsFlushed        = 0x100000u
-  };
-
   enum Effect {
     UNKNOWN_EFFECT,
     INSERTS_NEW_KEY,
@@ -75,13 +55,13 @@ struct TxnOperation {
 
   // This Operation was flushed to disk
   void set_flushed() {
-    flags |= kIsFlushed;
+    is_flushed = true;
   }
 
   // Initialization
   // TODO use placement new??
   void initialize(LocalTxn *txn, TxnNode *node,
-                  uint32_t flags, uint32_t orig_flags, uint64_t lsn,
+                  TxnOperation::Effect effect, uint32_t orig_flags, uint64_t lsn,
                   ups_key_t *key, ups_record_t *record);
 
   // Destructor
@@ -94,8 +74,7 @@ struct TxnOperation {
   // the parent node
   TxnNode *node;
 
-  // flags and type of this operation; defined in this file
-  uint32_t flags;
+  bool is_flushed = false;
 
   // the original flags of this operation, used when calling
   // ups_cursor_insert, ups_insert, ups_erase etc
@@ -175,7 +154,7 @@ struct TxnNode {
 
   // Appends an actual operation to this node
   TxnOperation *append(LocalTxn *txn, uint32_t orig_flags,
-              uint32_t flags, uint64_t lsn, ups_key_t *key,
+              TxnOperation::Effect effect, uint64_t lsn, ups_key_t *key,
               ups_record_t *record);
 
   // red-black tree stub, required for rb.h

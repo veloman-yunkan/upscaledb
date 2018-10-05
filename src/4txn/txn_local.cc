@@ -126,7 +126,7 @@ flush_committed_txns_impl(LocalTxnManager *tm, Context *context)
 
 void
 TxnOperation::initialize(LocalTxn *txn_, TxnNode *node_,
-            uint32_t flags_, uint32_t original_flags_, uint64_t lsn_,
+            TxnOperation::Effect effect_, uint32_t original_flags_, uint64_t lsn_,
             ups_key_t *key_, ups_record_t *record_)
 {
   ::memset(this, 0, sizeof(*this));
@@ -134,12 +134,9 @@ TxnOperation::initialize(LocalTxn *txn_, TxnNode *node_,
   txn = txn_;
   node = node_;
   lsn = lsn_;
-  flags = flags_;
+  is_flushed = false;
   original_flags = original_flags_;
-  if ( flags == kErase )
-    effect = ERASES_EXISTING_KEY;
-  else
-    effect = UNKNOWN_EFFECT;
+  effect = effect_;
 
   // copy the key data
   if (key_) {
@@ -214,10 +211,10 @@ TxnNode::TxnNode(LocalDb *db_, ups_key_t *key)
 }
 
 TxnOperation *
-TxnNode::append(LocalTxn *txn, uint32_t orig_flags, uint32_t flags,
+TxnNode::append(LocalTxn *txn, uint32_t orig_flags, TxnOperation::Effect effect,
                 uint64_t lsn, ups_key_t *key, ups_record_t *record)
 {
-  TxnOperation *op = TxnFactory::create_operation(txn, this, flags,
+  TxnOperation *op = TxnFactory::create_operation(txn, this, effect,
                         orig_flags, lsn, key, record);
 
   // store it in the chronological list which is managed by the node
@@ -295,19 +292,19 @@ flush_transaction_to_journal(LocalTxn *txn)
                       op->original_flags, op->lsn);
       continue;
     }
-    if (ISSET(op->flags, TxnOperation::kInsert)) {
+    if (op->effect == TxnOperation::INSERTS_NEW_KEY) {
       journal->append_insert(op->node->db, txn,
                       op->node->key(), &op->record,
                       op->original_flags, op->lsn);
       continue;
     }
-    if (ISSET(op->flags, TxnOperation::kInsertOverwrite)) {
+    if (op->effect == TxnOperation::OVERWRITES_EXISTING_KEY) {
       journal->append_insert(op->node->db, txn,
                       op->node->key(), &op->record,
                       op->original_flags | UPS_OVERWRITE, op->lsn);
       continue;
     }
-    if (ISSET(op->flags, TxnOperation::kInsertDuplicate)) {
+    if (op->effect == TxnOperation::DUPLICATES_EXISTING_KEY) {
       journal->append_insert(op->node->db, txn,
                     op->node->key(), &op->record,
                       op->original_flags | UPS_DUPLICATE, op->lsn);
@@ -475,29 +472,6 @@ TxnIndex::enumerate(Context *context, TxnIndex::Visitor *visitor)
 
 struct KeyCounter : TxnIndex::Visitor {
 
-  // While looking through the transaction history in reverse
-  // chronological order we encounter uncertainties with respect
-  // to how the current operation affects the key count. To resolve
-  // that uncertainty we must look back earlier in time. This
-  // enum helps to keep track of the uncertainty that we are
-  // currently facing.
-  // Note that these uncertainties would not exist if the
-  // TxnOperation enum members had the following meanings:
-  //
-  //   - kInsert: the operation creates a new key
-  //   - kInsertOverwrite: the operation overwrites an existing key
-  //   - kInsertDuplicate: the operation adds a duplicate of an existing key
-  //
-  enum UncertaintyType {
-    kNoUncertainty,
-
-    // Was this key-value pair inserted or overwritten?
-    kInsertVsOverwrite,
-
-    // Was the key newly created or an existing key was duplicated?
-    // (this is an uncertainty when counting distinct keys)
-    kCreateVsDuplicate
-  };
 
   KeyCounter(LocalDb *_db, LocalTxn *_txn, bool _distinct)
     : counter(0), distinct(_distinct), txn(_txn), db(_db) {
@@ -518,7 +492,6 @@ struct KeyCounter : TxnIndex::Visitor {
     // !!
     // if keys are overwritten or a duplicate key is inserted, then
     // we have to consolidate the btree keys with the txn-tree keys.
-    UncertaintyType uncertainty = kNoUncertainty;
 
     for (TxnOperation *op = node->newest_op;
                     op != 0;
@@ -528,7 +501,7 @@ struct KeyCounter : TxnIndex::Visitor {
         continue;
 
       if (optxn->is_committed() || txn == optxn) {
-        if (ISSET(op->flags, TxnOperation::kIsFlushed))
+        if (op->is_flushed)
           break;
 
         switch ( op->effect )
@@ -547,47 +520,12 @@ struct KeyCounter : TxnIndex::Visitor {
         case TxnOperation::ERASES_EXISTING_KEY:
           --counter; // XXX: what if there were duplicate keys?
           break;
-
-        case TxnOperation::UNKNOWN_EFFECT:
-          assert ( ! ISSET(op->flags, TxnOperation::kErase) );
-          if ( ISSET(op->flags, TxnOperation::kInsert) )
-          { // key exists - include it
-            uncertainty = kNoUncertainty;
-            counter++;
-          }
-          else if ( ISSET(op->flags, TxnOperation::kInsertOverwrite) )
-          {
-            // Not incrementing the counter, assuming that the key
-            // existed and this was an overwrite, however remaining
-            // uncertain about it
-            uncertainty = kInsertVsOverwrite;
-          }
-          else
-          {
-            assert(ISSET(op->flags, TxnOperation::kInsertDuplicate));
-            if ( distinct ) {
-              // Not incrementing the counter, assuming that the key
-              // existed and this was an addition of a duplicate key,
-              // however remaining uncertain about it
-              uncertainty = kCreateVsDuplicate;
-            } else {
-              uncertainty = kNoUncertainty;
-              counter++;
-            }
-          }
-          break;
         }
       }
 
       // txn is still active - ignore it
     }
 
-    if ( uncertainty == kInsertVsOverwrite || uncertainty == kCreateVsDuplicate ) {
-      // check if the key already exists in the btree - if yes,
-      // we do not count it (it will be counted later)
-      if (UPS_KEY_NOT_FOUND == be->find(context, 0, node->key(), 0, 0, 0, 0))
-        counter++;
-    }
   }
 
 
@@ -688,7 +626,7 @@ LocalTxnManager::flush_txn_to_changeset(Context *context, LocalTxn *txn)
     TxnNode *node = op->node;
 
     // perform the actual operation in the btree
-    if (NOTSET(op->flags, TxnOperation::kIsFlushed))
+    if (!op->is_flushed)
       node->db->flush_txn_operation(context, txn, op);
 
     assert(op->lsn > highest_lsn);

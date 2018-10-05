@@ -80,15 +80,15 @@ move_top_in_node(TxnCursor *cursor, TxnNode *node, bool ignore_conflicts,
     // committed transactions
     if (optxn == state_.parent->txn || optxn->is_committed()) {
       // a normal (overwriting) insert will return this key
-      if (ISSET(op->flags, TxnOperation::kInsert)
-          || ISSET(op->flags, TxnOperation::kInsertOverwrite)) {
+      if (op->effect == TxnOperation::INSERTS_NEW_KEY
+          || op->effect == TxnOperation::OVERWRITES_EXISTING_KEY) {
         cursor->couple_to(op);
         return 0;
       }
 
       // retrieve a duplicate key. The duplicates are handled by the caller.
       // here we only couple to the first op
-      if (ISSET(op->flags, TxnOperation::kInsertDuplicate)) {
+      if (op->effect == TxnOperation::DUPLICATES_EXISTING_KEY) {
         cursor->couple_to(op);
         return 0;
       }
