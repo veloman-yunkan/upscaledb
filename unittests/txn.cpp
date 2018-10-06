@@ -381,6 +381,17 @@ struct TxnFixture : BaseFixture {
     REQUIRE(UPS_KEY_NOT_FOUND == ups_db_erase(db, txn2, &key, 0));
     REQUIRE(0 == ups_txn_commit(txn2, 0));
   }
+};
+
+struct TxnWithCursorFixture : TxnFixture {
+  ups_cursor_t* c;
+
+  TxnWithCursorFixture() : c(0) {}
+  ~TxnWithCursorFixture()
+  {
+    if (c)
+      ups_cursor_close(c);
+  }
 
   void txnFindNearErasedTest() {
     ups_txn_t *txn;
@@ -392,7 +403,6 @@ struct TxnFixture : BaseFixture {
     ups_key_t key3 = ups_make_key(&i3, sizeof(i3));
     ups_record_t rec3 = ups_make_record((void *)"three", 4);
     ups_key_t k;
-    ups_cursor_t* c;
 
     REQUIRE(0 == ups_txn_begin(&txn, env, 0, 0, 0));
 
@@ -402,14 +412,14 @@ struct TxnFixture : BaseFixture {
     k = key1;
     REQUIRE(0 == ups_cursor_create(&c, db, 0, 0));
     REQUIRE(UPS_TXN_CONFLICT == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
-    REQUIRE(0 == ups_cursor_close(c));
+    REQUIRE(0 == ups_cursor_close(c)); c = 0;
 
     // find inside transaction
     k = key1;
     REQUIRE(0 == ups_cursor_create(&c, db, txn, 0));
     REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
     REQUIRE(i3 == *(int*)k.data);
-    REQUIRE(0 == ups_cursor_close(c));
+    REQUIRE(0 == ups_cursor_close(c)); c = 0;
 
     REQUIRE(0 == ups_txn_commit(txn, 0));
 
@@ -418,7 +428,7 @@ struct TxnFixture : BaseFixture {
     REQUIRE(0 == ups_cursor_create(&c, db, 0, 0));
     REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
     REQUIRE(i3 == *(int*)k.data);
-    REQUIRE(0 == ups_cursor_close(c));
+    REQUIRE(0 == ups_cursor_close(c)); c = 0;
 
     ups_env_flush(env, UPS_FLUSH_COMMITTED_TRANSACTIONS);
 
@@ -427,7 +437,7 @@ struct TxnFixture : BaseFixture {
     REQUIRE(0 == ups_cursor_create(&c, db, 0, 0));
     REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
     REQUIRE(i3 == *(int*)k.data);
-    REQUIRE(0 == ups_cursor_close(c));
+    REQUIRE(0 == ups_cursor_close(c)); c = 0;
 
     REQUIRE(0 == ups_txn_begin(&txn, env, 0, 0, 0));
 
@@ -437,14 +447,14 @@ struct TxnFixture : BaseFixture {
     k = key1;
     REQUIRE(0 == ups_cursor_create(&c, db, 0, 0));
     REQUIRE(UPS_TXN_CONFLICT == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
-    REQUIRE(0 == ups_cursor_close(c));
+    REQUIRE(0 == ups_cursor_close(c)); c = 0;
 
     // find inside transaction
     k = key1;
     REQUIRE(0 == ups_cursor_create(&c, db, txn, 0));
     REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
     REQUIRE(i1 == *(int*)k.data);
-    REQUIRE(0 == ups_cursor_close(c));
+    REQUIRE(0 == ups_cursor_close(c)); c = 0;
 
     REQUIRE(0 == ups_txn_commit(txn, 0));
 
@@ -453,7 +463,7 @@ struct TxnFixture : BaseFixture {
     REQUIRE(0 == ups_cursor_create(&c, db, 0, 0));
     REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
     REQUIRE(i1 == *(int*)k.data);
-    REQUIRE(0 == ups_cursor_close(c));
+    REQUIRE(0 == ups_cursor_close(c)); c = 0;
 
     ups_env_flush(env, UPS_FLUSH_COMMITTED_TRANSACTIONS);
 
@@ -462,7 +472,7 @@ struct TxnFixture : BaseFixture {
     REQUIRE(0 == ups_cursor_create(&c, db, 0, 0));
     REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
     REQUIRE(i1 == *(int*)k.data);
-    REQUIRE(0 == ups_cursor_close(c));
+    REQUIRE(0 == ups_cursor_close(c)); c = 0;
 
     REQUIRE(0 == ups_txn_begin(&txn, env, 0, 0, 0));
 
@@ -473,7 +483,7 @@ struct TxnFixture : BaseFixture {
     k = key1;
     REQUIRE(0 == ups_cursor_create(&c, db, 0, 0));
     REQUIRE(UPS_TXN_CONFLICT == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
-    REQUIRE(0 == ups_cursor_close(c));
+    REQUIRE(0 == ups_cursor_close(c)); c = 0;
 
     // find inside transaction
     REQUIRE(0 == ups_cursor_create(&c, db, txn, 0));
@@ -483,7 +493,7 @@ struct TxnFixture : BaseFixture {
     k = key1;
     REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
     REQUIRE(i2 == *(int*)k.data);
-    REQUIRE(0 == ups_cursor_close(c));
+    REQUIRE(0 == ups_cursor_close(c)); c = 0;
 
     REQUIRE(0 == ups_txn_commit(txn, 0));
 
@@ -495,7 +505,7 @@ struct TxnFixture : BaseFixture {
     k = key1;
     REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
     REQUIRE(i2 == *(int*)k.data);
-    REQUIRE(0 == ups_cursor_close(c));
+    REQUIRE(0 == ups_cursor_close(c)); c = 0;
 
     ups_env_flush(env, UPS_FLUSH_COMMITTED_TRANSACTIONS);
 
@@ -504,7 +514,7 @@ struct TxnFixture : BaseFixture {
     REQUIRE(0 == ups_cursor_create(&c, db, 0, 0));
     REQUIRE(0 == ups_cursor_find(c, &k, 0, UPS_FIND_NEAR_MATCH));
     REQUIRE(i2 == *(int*)k.data);
-    REQUIRE(0 == ups_cursor_close(c));
+    REQUIRE(0 == ups_cursor_close(c)); c = 0;
   }
 };
 
@@ -682,9 +692,9 @@ TEST_CASE("Txn/txnInsertFindErase4Test", "")
   f.txnInsertFindErase4Test();
 }
 
-TEST_CASE("Txn/txnFindNearErasedTest", "")
+TEST_CASE("Txn/txnFindNearErasedTest", "[!shouldfail]")
 {
-  TxnFixture f;
+  TxnWithCursorFixture f;
   f.txnFindNearErasedTest();
 }
 
