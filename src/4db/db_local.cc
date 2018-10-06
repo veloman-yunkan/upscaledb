@@ -1458,8 +1458,18 @@ LocalDb::cursor_move(Cursor *hcursor, ups_key_t *key,
   if (unlikely(st))
     return st;
 
-  // store the direction
-  cursor->last_operation = flags & (UPS_CURSOR_NEXT | UPS_CURSOR_PREVIOUS);
+  const uint32_t this_op = flags & (UPS_CURSOR_NEXT | UPS_CURSOR_PREVIOUS);
+  if ( cursor->last_operation == LocalCursor::kLookupOrInsert
+       && this_op == 0 ) {
+    // This was a pseudo-move on a possibly desynchronized
+    // state of the btree and txn cursors, and they were NOT synchronized
+    // because of an optimization in LocalCursor::move(). Therefore
+    // not updating cursor->last_operation (as if this pseudo-move call
+    // to cursor_move() didn't even happen).
+  } else {
+    // store the direction
+    cursor->last_operation = this_op;
+  }
 
   return 0;
 }
