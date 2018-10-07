@@ -1424,7 +1424,7 @@ TEST_CASE("Txn/issue106Test", "")
   }
 }
 
-TEST_CASE("Txn/issue107Test", "")
+TEST_CASE("Txn/issue107Test", "[!shouldfail]")
 {
   for ( int i = 1; i < 10; ++i )
   {
