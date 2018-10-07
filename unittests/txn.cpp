@@ -518,13 +518,13 @@ struct TxnWithCursorFixture : TxnFixture {
   }
 };
 
-struct Issue105Fixture : TxnFixture {
-  explicit Issue105Fixture(int flush_threshold)
+struct HandlingOfUnflushedTxnsFixture : TxnFixture {
+  explicit HandlingOfUnflushedTxnsFixture(int flush_threshold)
   {
     ups_set_committed_flush_threshold(flush_threshold);
   }
 
-  ~Issue105Fixture()
+  ~HandlingOfUnflushedTxnsFixture()
   {
     ups_set_committed_flush_threshold(10); // XXX: restore the actual default
   }
@@ -563,18 +563,6 @@ struct Issue105Fixture : TxnFixture {
 
       REQUIRE(0 == ups_cursor_close(cursor));
     }
-  }
-};
-
-struct Issue106Fixture : TxnFixture {
-  explicit Issue106Fixture(int flush_threshold)
-  {
-    ups_set_committed_flush_threshold(flush_threshold);
-  }
-
-  ~Issue106Fixture()
-  {
-    ups_set_committed_flush_threshold(10); // XXX: restore the actual default
   }
 
   void issue106Test(int item_count) {
@@ -1400,7 +1388,7 @@ TEST_CASE("Txn/issue105Test", "")
 {
   for ( int i = 1; i < 20; ++i )
   {
-    Issue105Fixture f(i);
+    HandlingOfUnflushedTxnsFixture f(i);
     f.issue105Test(10);
   }
 }
@@ -1409,7 +1397,7 @@ TEST_CASE("Txn/issue106Test", "")
 {
   for ( int i = 1; i < 10; ++i )
   {
-    Issue106Fixture f(i);
+    HandlingOfUnflushedTxnsFixture f(i);
     f.issue106Test(10);
   }
 }
