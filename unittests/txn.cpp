@@ -594,6 +594,28 @@ struct HandlingOfUnflushedTxnsFixture : TxnFixture {
 
     REQUIRE( 0 == ups_cursor_close(cur) );
   }
+
+  void issue107Test(int item_count) {
+    ups_record_t rec = {0};
+    for (int i = 0; i < item_count; i++)
+    {
+      ups_key_t key = ups_make_key(&i, sizeof(i));
+      REQUIRE(0 == ups_db_insert(db, 0, &key, &rec, 0));
+    }
+
+    ups_cursor_t* cur;
+
+    REQUIRE( 0 == ups_cursor_create(&cur, db, 0, 0) );
+
+    int key_data = 0;
+    ups_key_t key = ups_make_key(&key_data, sizeof(key_data));
+
+    REQUIRE(0 == ups_cursor_move(cur, &key, &rec, UPS_CURSOR_FIRST));
+    REQUIRE(UPS_KEY_NOT_FOUND ==
+                     ups_cursor_move(cur, &key, &rec, UPS_CURSOR_PREVIOUS));
+
+    REQUIRE(0 == ups_cursor_close(cur));
+  }
 };
 
 TEST_CASE("Txn/beginCommitTest", "")
@@ -1399,6 +1421,15 @@ TEST_CASE("Txn/issue106Test", "")
   {
     HandlingOfUnflushedTxnsFixture f(i);
     f.issue106Test(10);
+  }
+}
+
+TEST_CASE("Txn/issue107Test", "")
+{
+  for ( int i = 1; i < 10; ++i )
+  {
+    HandlingOfUnflushedTxnsFixture f(i);
+    f.issue107Test(10);
   }
 }
 
